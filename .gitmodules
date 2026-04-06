@@ -1,0 +1,3 @@
+[submodule ".github/copilot-shared"]
+	path = .github/copilot-shared
+	url = https://github.com/mannyraji/copilot-shared
