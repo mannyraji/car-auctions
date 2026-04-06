@@ -108,9 +108,9 @@ An operator monitoring the system in production needs distributed tracing across
 
 ### Edge Cases
 
-- What happens when the NHTSA vPIC API is unreachable? The VIN decoder must return a clear error without crashing, and callers should handle gracefully (e.g., proceeding with partial data).
+- What happens when the NHTSA vPIC API is unreachable? The VIN decoder must return a clear error without crashing, negatively cache the failure for 5 minutes to prevent repeated calls, and callers should handle gracefully (e.g., proceeding with partial data).
 - What happens when the browser pool reaches maximum capacity? Requests must queue rather than spawn unlimited browser instances, with a configurable concurrency limit.
-- What happens when a priority queue receives a burst of `critical` requests? They must still respect the rate limit (1 req/3s) to avoid triggering anti-bot defenses, even though they bypass the queue ordering.
+- What happens when a priority queue receives a burst of `critical` requests? They bypass both queue ordering and the rate limit. Burst protection (e.g., anti-bot throttling) is the caller's responsibility, not the queue's.
 - What happens when the auction normalizer encounters an unknown IAAI `titleCode`? It must map to a sensible default (e.g., `"Unknown"`) and log a warning rather than throwing.
 - What happens when two scrapers running in the same process both try to shut down the browser pool? Shutdown must be idempotent and reference-counted.
 - What happens when the OTEL endpoint is set but unreachable? Tracing must fail silently and not block or crash the application.
@@ -120,29 +120,29 @@ An operator monitoring the system in production needs distributed tracing across
 ### Functional Requirements
 
 - **FR-001**: The library MUST define a shared `AuctionListing` interface that represents a source-agnostic normalized auction listing with all fields documented in the technical spec (source, lot_number, VIN, year, make, model, damage info, bid data, sale info, location, and extended fields)
-- **FR-002**: The library MUST define shared error types (`ScraperError`, `CaptchaError`, `RateLimitError`, `CacheError`, `AnalysisError`) and a structured `ToolResponse<T>` envelope with `success`, `data`, `error` (with `code`, `message`, `retryable`, optional `retryAfterMs`), `cached`, `stale`, and `timestamp` fields
+- **FR-002**: The library MUST define shared error types (`ScraperError`, `CaptchaError`, `RateLimitError`, `CacheError`, `AnalysisError`) and a structured `ToolResponse<T>` envelope with `success`, `data`, `error` (with `code`, `message`, `retryable`, optional `retryAfterMs`), `cached`, `stale`, `cachedAt` (optional, required when `stale: true`), and `timestamp` fields
 - **FR-003**: The library MUST define shared interfaces for `DealAnalysis`, `RiskFlag`, `DealSummary`, `VINDecodeResult`, `ProfitEstimate`, `RepairEstimate`, `RepairLineItem`, `CarrierQuote`, `ValueAdjustment`, `BrowserConfig`, and all source-specific raw types (`CopartRawListing`, `IaaiRawListing`)
 - **FR-004**: The library MUST define shared interfaces for Carfax sub-records (`ServiceRecord`, `RecallRecord`), NMVTIS sub-records (`NmvtisTitleRecord`, `InsuranceLossRecord`, `JunkSalvageRecord`, `OdometerRecord`), and the `ErrorCode` union type
 - **FR-005**: The auction normalizer MUST convert raw Copart responses into the `AuctionListing` shape with correct field mapping (e.g., `lotNumberStr` → `lot_number`, `mkn` → `make`, `dd` → `damage_primary`)
-- **FR-006**: The auction normalizer MUST convert raw IAAI responses into the `AuctionListing` shape, including type coercions (`hasKeys: "YES"/"NO"` → `boolean`) and code-to-label mappings (`titleCode: "SV"` → `"Salvage"`, `"CL"` → `"Clean"`, `"RB"` → `"Rebuilt"`)
-- **FR-007**: The auction normalizer MUST handle unknown or missing fields gracefully by using sensible defaults and never throwing on unexpected input
+- **FR-006**: The auction normalizer MUST convert raw IAAI responses into the `AuctionListing` shape, including type coercions (`hasKeys: "YES"/"NO"` → `boolean`) and code-to-label mappings for the full known title code set: `SV` → `"Salvage"`, `CL` → `"Clean"`, `RB` → `"Rebuilt"`, `FL` → `"Flood"`, `NR` → `"Non-Repairable"`, `JK` → `"Junk"`, `MV` → `"Manufacturer Buyback"`, and any additional documented IAAI codes. Unknown codes MUST map to `"Unknown"` with a logged warning
+- **FR-007**: The auction normalizer MUST handle unknown or missing fields gracefully by using sensible defaults and never throwing on unexpected input. Default values: `trim` → `null`, `damage_secondary` → `null`, `has_keys` → `false`, `odometer` → `null`, `odometer_status` → `null`, `color` → `null`, `engine` → `null`, `transmission` → `null`, `drive_type` → `null`, `fuel_type` → `null`, `cylinders` → `null`, `current_bid` → `null`, `buy_now_price` → `null`, `sale_date` → `null`, `sale_status` → `"UPCOMING"`, `final_bid` → `null`, `image_url` → `null`, `image_urls` → `[]`, `seller` → `null`, `grid_row` → `null`, `latitude` → `null`, `longitude` → `null`, `title_code` → `null`
 - **FR-008**: The VIN decoder MUST validate VINs before making API calls: exactly 17 alphanumeric characters, rejecting I, O, and Q
 - **FR-009**: The VIN decoder MUST return structured vehicle specifications including at minimum: year, make, model, trim, engine type, body class, drive type, fuel type, and transmission
-- **FR-010**: The VIN decoder MUST support caching of results with a 90-day TTL via a pluggable `VinCache` interface (with `get(vin)` and `set(vin, result, ttl)` methods). A default `better-sqlite3` implementation MUST be provided (WAL mode, stored at `data/vin-cache.sqlite`, gitignored) and an in-memory LRU fallback MUST be available for testing. When no cache is injected, the decoder MUST still function correctly without caching
+- **FR-010**: The VIN decoder MUST support caching of results with a 90-day TTL via a pluggable `VinCache` interface (with `get(vin)` and `set(vin, result, ttl)` methods). A default `better-sqlite3` implementation MUST be provided (WAL mode, stored at `data/vin-cache.sqlite`, gitignored) and an in-memory LRU fallback MUST be available for testing. When no cache is injected, the decoder MUST still function correctly without caching. Failed decode attempts (API errors, timeouts) MUST be negatively cached for 5 minutes to prevent thundering herd against a failing NHTSA API
 - **FR-011**: The MCP helpers MUST provide a bootstrap function that creates an MCP server supporting stdio, SSE, and WebSocket transports, selectable via environment variable (`TRANSPORT`) or function parameter
 - **FR-012**: The browser pool MUST manage Playwright browser instance lifecycle (launch, reuse contexts, close), integrate the stealth plugin for fingerprint masking, and support proxy configuration via `PROXY_URL`
 - **FR-013**: The priority queue MUST support five priority levels: `critical` (immediate), `high` (max 2s wait), `normal` (max 5s wait), `low` (max 10s wait), and `background` (max 30s wait)
 - **FR-014**: The priority queue MUST enforce a global rate limit (configurable, default 1 request per 3 seconds) using a token bucket approach
 - **FR-015**: The priority queue MUST guarantee that `low` and `background` tasks get at least 1 execution slot per 60 seconds even under sustained high-priority load (starvation prevention)
-- **FR-016**: The priority queue MUST allow `critical` requests to bypass queue ordering while still respecting the underlying rate limit
+- **FR-016**: The priority queue MUST allow `critical` requests to bypass both queue ordering and the rate limit, guaranteeing processing within 100 milliseconds of enqueue. Burst protection for critical requests is the caller's responsibility
 - **FR-017**: The tracing module MUST initialize OpenTelemetry with OTLP HTTP export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and be a complete no-op when unset
-- **FR-018**: The tracing module MUST support custom span attributes: `tool.name`, `tool.source`, `cache.hit`, `queue.priority`, `queue.wait_ms`
+- **FR-018**: The tracing module MUST support custom span attributes: `tool.name`, `tool.source`, `tool.status`, `tool.duration_ms`, `cache.hit`, `queue.priority`, `queue.wait_ms`
 - **FR-019**: The tracing module MUST use the span naming convention `{package}.{operation}` (e.g., `copart.search`, `cache.read`, `analyzer.pipeline`)
 
 ### Non-Functional Requirements
 
 - **NFR-001**: All exported functions MUST be tree-shakeable (named exports only, no side effects at module scope)
-- **NFR-002**: The shared package MUST have zero runtime dependencies beyond `@modelcontextprotocol/sdk`, `playwright`, `playwright-extra`, `puppeteer-extra-plugin-stealth`, `better-sqlite3`, `sharp`, `@opentelemetry/sdk-node`, `@opentelemetry/exporter-trace-otlp-http`, and `ws`
+- **NFR-002**: The shared package MUST have zero runtime dependencies beyond `@modelcontextprotocol/sdk`, `playwright`, `playwright-extra`, `puppeteer-extra-plugin-stealth`, `better-sqlite3`, `@opentelemetry/sdk-node`, `@opentelemetry/exporter-trace-otlp-http`, and `ws`
 - **NFR-003**: The package MUST target Node.js 20+ and compile under `ES2022` target with TypeScript `strict: true`
 - **NFR-004**: Browser pool MUST enforce a configurable maximum concurrency (default: 3 contexts) to bound memory usage
 - **NFR-005**: All public API functions MUST include JSDoc documentation with `@example` tags
@@ -167,7 +167,7 @@ An operator monitoring the system in production needs distributed tracing across
 - **SC-006**: Enabling OpenTelemetry tracing adds less than 5% overhead to tool call latency
 - **SC-007**: The browser pool reuses a single browser instance across multiple concurrent context requests, keeping peak memory usage proportional to context count, not browser count
 - **SC-008**: All shared types compile with TypeScript strict mode enabled and produce zero type errors
-- **SC-009**: The auction normalizer handles 100% of known IAAI title codes (`SV`, `CL`, `RB`) and degrades gracefully for unknown codes
+- **SC-009**: The auction normalizer handles 100% of the full known IAAI title code set (`SV`, `CL`, `RB`, `FL`, `NR`, `JK`, `MV`) and degrades gracefully for unknown codes by mapping to `"Unknown"`
 
 ## Public API Surface
 
@@ -194,7 +194,7 @@ export { ScraperError, CaptchaError, RateLimitError, CacheError, AnalysisError }
 export { normalizeCopart, normalizeIaai } from './normalizer'
 
 // VIN decoder
-export { decodeVin, validateVin, type VinCache } from './vin-decoder'
+export { decodeVin, validateVin, type VinCache, SqliteVinCache, InMemoryVinCache } from './vin-decoder'
 
 // MCP server bootstrap
 export { createMcpServer, type McpServerOptions } from './mcp-helpers'
@@ -211,6 +211,16 @@ export { initTracing, withSpan, type SpanAttributes } from './tracing'
 
 Internal modules (e.g., parser helpers, IAAI code maps) MUST NOT be exported. Consumers that need access to internals should request a new public API.
 
+## Clarifications
+
+### Session 2026-04-06
+
+- Q: How should critical requests interact with the rate limit, given FR-016 (respects rate limit) contradicts SC-004 (100ms guarantee)? → A: Critical requests bypass the rate limit entirely. The 100ms processing guarantee holds unconditionally. Burst protection for critical requests is the caller's responsibility.
+- Q: Does the shared package ship a concrete SQLite VIN cache or only the VinCache interface? → A: Ship both — a VinCache interface, a concrete SqliteVinCache class (WAL mode, data/vin-cache.sqlite), and an InMemoryVinCache for testing. Consumers can inject their own or use the defaults.
+- Q: Should the shared package export image-processing helpers (Sharp-based), or is sharp only used by individual scrapers? → A: Remove sharp from the shared package. Image processing is scraper-specific; each scraper owns its own sharp usage.
+- Q: Should the normalizer's IAAI title code map be limited to SV/CL/RB or expanded to the full known set? → A: Expand to the full known set (SV, CL, RB, FL, NR, JK, MV, and others). Update SC-009 accordingly.
+- Q: Should failed VIN decode attempts be cached to prevent repeated calls to a failing NHTSA API? → A: Yes. Cache failures for 5 minutes (negative cache) to prevent thundering herd against a down service.
+
 ## Assumptions
 
 - The NHTSA vPIC API (`https://vpic.nhtsa.dot.gov/api/`) remains free and publicly accessible without authentication
@@ -218,5 +228,5 @@ Internal modules (e.g., parser helpers, IAAI code maps) MUST NOT be exported. Co
 - Browser pool consumers (scraper packages) run in Node.js 20+ environments with Playwright browsers pre-installed
 - OpenTelemetry tracing targets an OTLP-compatible collector (e.g., Jaeger) and does not need to support vendor-specific exporters
 - The priority queue operates as a per-process singleton; cross-process coordination is out of scope (each scraper process self-governs)
-- VIN caching is handled by consumers via their own SQLite cache layers; the VIN decoder itself provides the interface but delegates persistence to the caller
+- The shared package ships a concrete `SqliteVinCache` (WAL mode, `data/vin-cache.sqlite`) and an `InMemoryVinCache` for testing. Consumers may inject their own `VinCache` implementation but are not required to provide one
 - The library does not include its own test fixtures — fixture files for Copart/IAAI raw data live in the respective scraper package test directories
