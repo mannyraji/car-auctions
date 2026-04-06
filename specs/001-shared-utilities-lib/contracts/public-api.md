@@ -35,6 +35,7 @@ export type {
   ToolResponse,
   ToolError,
   ErrorCode,
+  StaleableResponse,
 
   // Browser config
   BrowserConfig,

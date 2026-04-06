@@ -50,8 +50,8 @@ if (!valid) {
   console.error(error); // "VIN contains invalid character: O"
 }
 
-// With SQLite caching (90-day TTL)
-const cache = new SqliteVinCache('data/vin-cache.sqlite');
+// With SQLite caching (90-day TTL) using the default path: data/vin-cache.sqlite
+const cache = new SqliteVinCache();
 const specs = await decodeVin('1HGCM82633A004352', { cache });
 console.log(specs.year, specs.make, specs.model); // 2003 HONDA Accord
 ```
@@ -151,8 +151,13 @@ if (isCaptchaPage(page)) {
 try {
   // ...
 } catch (err) {
-  if (err instanceof AppError) {
-    return { success: false, error: err.toToolError(), cached: false, stale: false, timestamp: new Date().toISOString() };
+  if (
+    typeof err === 'object' &&
+    err !== null &&
+    'toToolError' in err &&
+    typeof (err as { toToolError: unknown }).toToolError === 'function'
+  ) {
+    return { success: false, error: (err as { toToolError: () => unknown }).toToolError(), cached: false, stale: false, timestamp: new Date().toISOString() };
   }
 }
 ```

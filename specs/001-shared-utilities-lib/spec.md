@@ -230,4 +230,4 @@ Internal modules (e.g., parser helpers, IAAI code maps) MUST NOT be exported. Co
 - OpenTelemetry tracing targets an OTLP-compatible collector (e.g., Jaeger) and does not need to support vendor-specific exporters
 - The priority queue operates as a per-process singleton; cross-process coordination is out of scope (each scraper process self-governs)
 - The shared package ships a concrete `SqliteVinCache` (WAL mode, `data/vin-cache.sqlite`) and an `InMemoryVinCache` for testing. Consumers may inject their own `VinCache` implementation but are not required to provide one
-- The library does not include its own test fixtures — fixture files for Copart/IAAI raw data live in the respective scraper package test directories
+- Canonical/full-fidelity Copart and IAAI raw fixtures remain owned by the respective scraper packages, but `packages/shared/tests/fixtures/` may contain minimal copied or reduced samples needed for shared normalizer contract tests
