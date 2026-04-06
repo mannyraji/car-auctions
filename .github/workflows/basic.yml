@@ -52,7 +52,7 @@ jobs:
         run: npm ci
       - name: Build TypeScript
         if: steps.project-files.outputs.has_npm_lockfile == 'true' && steps.project-files.outputs.has_tsconfig == 'true'
-        run: npx tsc --build
+        run: npm run build --workspaces --if-present
       - name: Run tests
         if: steps.project-files.outputs.has_npm_lockfile == 'true'
         run: npm run test --workspaces --if-present -- --coverage
