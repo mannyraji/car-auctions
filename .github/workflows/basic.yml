@@ -25,12 +25,6 @@ jobs:
             echo "Skipping Node.js checks because no root package.json and npm lockfile were found."
           fi
 
-          if [ -f package.json ]; then
-            echo "has_package_json=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_package_json=false" >> "$GITHUB_OUTPUT"
-          fi
-
           if find . -maxdepth 2 \( -name 'tsconfig.json' -o -name 'tsconfig.*.json' \) | grep -q .; then
             echo "has_tsconfig=true" >> "$GITHUB_OUTPUT"
           else
