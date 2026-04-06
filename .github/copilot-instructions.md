@@ -149,3 +149,10 @@ Project-specific security rules:
 
 - **Technical Spec**: `docs/spec.md` — tool definitions, type interfaces, architecture
 - **Implementation Plan**: `docs/plan.md` — 10 phases, acceptance criteria, dependency graph
+
+## Active Technologies
+- TypeScript 5.8.x, Node.js 20+ + `@modelcontextprotocol/sdk` ^1.29.0, `playwright` ^1.59.1, `playwright-extra` ^4.3.6, `puppeteer-extra-plugin-stealth` ^2.11.2, `better-sqlite3` ^12.8.0, `sharp` ^0.34.5, `@opentelemetry/sdk-node` ^0.214.0, `@opentelemetry/exporter-trace-otlp-http` ^0.214.0, `ws` ^8.x (001-shared-utilities-lib)
+- SQLite (WAL mode) via `better-sqlite3` for VIN cache; in-memory LRU fallback for tests (001-shared-utilities-lib)
+
+## Recent Changes
+- 001-shared-utilities-lib: Added TypeScript 5.8.x, Node.js 20+ + `@modelcontextprotocol/sdk` ^1.29.0, `playwright` ^1.59.1, `playwright-extra` ^4.3.6, `puppeteer-extra-plugin-stealth` ^2.11.2, `better-sqlite3` ^12.8.0, `sharp` ^0.34.5, `@opentelemetry/sdk-node` ^0.214.0, `@opentelemetry/exporter-trace-otlp-http` ^0.214.0, `ws` ^8.x

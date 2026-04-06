@@ -1,0 +1,21 @@
+{
+  "StockNumber": "98765432",
+  "Vin": "1FTFW1ET0DFC10312",
+  "Year": 2013,
+  "Make": "FORD",
+  "Model": "F-150",
+  "Trim": "XLT",
+  "BodyStyle": "Pickup Truck",
+  "Color": "Blue",
+  "Mileage": 120000,
+  "PrimaryDamage": "Collision",
+  "SecondaryDamage": "Undercarriage",
+  "hasKeys": "YES",
+  "titleCode": "SV",
+  "CurrentBid": 3200,
+  "BuyItNow": null,
+  "SaleDate": "2024-08-20T10:00:00Z",
+  "BranchName": "Houston",
+  "State": "TX",
+  "Zip": "77001"
+}

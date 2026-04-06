@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+packages/*/dist/
+dist/
+
+# Runtime data
+packages/*/data/
+data/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Coverage
+coverage/
+packages/*/coverage/
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary
+*.tmp
