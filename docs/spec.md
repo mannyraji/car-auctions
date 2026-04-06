@@ -1,6 +1,18 @@
-# Car Auctions MCP Monorepo — Technical Specification v2
+# Car Auctions MCP Monorepo — Technical Specification v2.1
 
 Build a TypeScript monorepo for MCP (Model Context Protocol) servers that scrape vehicle auction data, estimate repair costs, calculate profit margins, and surface the best deals — an AI-powered copilot for auction car flippers.
+
+---
+
+### Changelog
+
+| Version | Date | Changes |
+|---------|------|---------|
+| v2.1 | 2026-04-06 | Added: missing interface definitions, IAAI fee schedule, full IAAI tool definitions, error response contract with error codes, deal scoring formula & thresholds, scan_deals pipeline, transport cost model, gateway failover/timeout spec, WebSocket bid protocol, rate limiter ↔ queue interaction, ESLint/Prettier config, watchlist indexes |
+| v2.0 | — | Added parts-pricing-mcp, nmvtis-mcp, gateway-mcp, AI vision modules, priority queue, OpenTelemetry, alerts service overhaul |
+| v1.0 | — | Original spec: Copart + IAAI scrapers, Carfax, deal analyzer |
+
+---
 
 ## Monorepo Structure
 
@@ -289,19 +301,50 @@ Retrieve past sold lot data for comparable vehicles. Params: make, model, year_m
 IAAI (Insurance Auto Auctions) is the second-largest US salvage auction after Copart. Adding it roughly doubles inventory coverage. The scraper architecture mirrors Copart's since the data model is nearly identical.
 
 ### iaai_search
-Search IAAI inventory. Params: query, make, model, year_min, year_max, damage_type, location, price_max, sort_by, limit, page. Returns normalized listing summaries using the same shared `AuctionListing` schema as Copart. Key field mapping: IAAI `stock_number` → `lot_number`, IAAI `branch` → `location`.
+Search IAAI inventory. Params: query (string), make, model, year_min, year_max, damage_type, location, price_max, sort_by (bid_asc/bid_desc/year_desc/sale_date_asc), limit (default 20, max 50), page. Returns normalized listing summaries using the same shared `AuctionListing` schema as Copart.
+
+**Key field mapping** (IAAI → normalized):
+| IAAI field | AuctionListing field | Notes |
+|------------|---------------------|-------|
+| `stockNumber` | `lot_number` | Primary identifier |
+| `branch` | `location` | Auction yard name |
+| `branchZip` | `location_zip` | |
+| `hasKeys` | `has_keys` | IAAI returns `"YES"`/`"NO"` string → boolean |
+| `titleCode` | `title_type` | Requires code-to-label mapping (SV→Salvage, CL→Clean, RB→Rebuilt) |
+| `primaryDamage` | `damage_primary` | Damage codes differ from Copart — normalizer handles mapping |
+
+**Implementation notes:**
+- Intercept IAAI's `/inventorySearch` endpoint to capture JSON search results
+- Fall back to DOM scraping with IAAI-specific selectors if interception fails
+- Cache results in memory LRU (15 min TTL)
 
 ### iaai_get_listing
-Full stock details by stock_number. Returns same shape as copart_get_listing via `auction-normalizer.ts`.
+Full stock details by stock_number. Params: stock_number (string, required). Returns the full `AuctionListing` shape via `auction-normalizer.ts`, identical to `copart_get_listing` output.
+
+**Implementation notes:**
+- Navigate to `https://www.iaai.com/VehicleDetail/{stockNumber}`
+- Intercept IAAI's `/stockDetails` or `/VehicleDetail` API endpoint
+- IAAI DOM structure differs from Copart — `iaai-client.ts` handles IAAI-specific selectors for condition, sale info, and vehicle details panels
+- Cache in SQLite (1 hour TTL)
 
 ### iaai_get_images
-Download vehicle photos as base64. Same interface as `copart_get_images`.
+Download vehicle photos as base64. Params: stock_number (required), image_types (filter: exterior/interior/undercarriage/engine/damage), max_images (default 10). Returns same `{index, label, category, base64, width, height}` shape as `copart_get_images`.
+
+**Implementation notes:**
+- IAAI image URLs follow a different CDN pattern (`gw.img.iaai.com`) — `iaai-client.ts` constructs URLs from stock number + image sequence
+- Images may require session cookie for full-resolution access
+- Same Sharp processing pipeline as Copart (resize to 800px, WebP 75%)
 
 ### iaai_decode_vin
-Reuses shared `vin-decoder.ts`. Same interface as `copart_decode_vin`.
+Reuses shared `vin-decoder.ts`. Same interface and behavior as `copart_decode_vin`. Params: vin (17-char). Returns decoded vehicle specs via NHTSA vPIC API.
 
 ### iaai_sold_history
-Past sold lots. Same interface as `copart_sold_history`.
+Past sold lots for comparable vehicles. Params: make, model, year_min, year_max, damage_type, location, limit (default 20). Returns same shape as `copart_sold_history`: array of `{lot_number, sale_date, final_bid, damage_primary, odometer, title_type}` plus aggregate statistics.
+
+**Implementation notes:**
+- IAAI sold data is behind `/soldVehicles` or similar search endpoint
+- Cache in SQLite (7 day TTL)
+- Combined with Copart sold data in `get_market_comps` for wider price baselines
 
 ### Implementation Notes — IAAI
 - IAAI's site uses a different internal API structure than Copart — prioritize network interception of their `/inventorySearch` and `/stockDetails` endpoints.
@@ -481,6 +524,73 @@ With the gateway, the MCP config collapses from 6+ entries to one:
 }
 ```
 
+### Failover & Timeout Behavior
+
+When a downstream MCP server is unavailable or slow:
+
+| Scenario | Gateway Behavior |
+|----------|------------------|
+| Downstream unreachable | Return `DOWNSTREAM_UNAVAILABLE` error with `retryable: true`. If cached data exists for the requested tool+params, return stale cached result with `stale: true`. |
+| Downstream timeout (>30s) | Cancel request, return `TIMEOUT` error. Timeout is configurable per downstream in `gateway.json` via `timeoutMs` field (default 30000). |
+| Downstream returns error | Pass through the original error code and message to the caller. |
+| Partial pipeline failure | For `analyze_vehicle`, if a non-critical step fails (e.g., Carfax, NMVTIS), continue the pipeline with available data and note the skipped step in the response. Critical failures (listing fetch, VIN decode) abort the pipeline. |
+
+**Circuit breaker**: If a downstream server fails 5 consecutive requests within 2 minutes, the gateway marks it as `degraded` and skips it for 60 seconds before retrying. `gateway_health` reports circuit breaker state for each downstream.
+
+### WebSocket Bid Monitoring Protocol
+
+The WebSocket transport enables real-time bid updates for watched lots during live auctions.
+
+**Connection:** `ws://gateway:3001/ws`
+
+**Client → Server messages:**
+
+```typescript
+// Subscribe to bid updates for specific lots
+{ type: 'subscribe', lots: [{ source: 'copart', lotNumber: '12345678' }] }
+
+// Unsubscribe
+{ type: 'unsubscribe', lots: [{ source: 'copart', lotNumber: '12345678' }] }
+
+// Ping (keepalive)
+{ type: 'ping' }
+```
+
+**Server → Client messages:**
+
+```typescript
+// Bid update pushed to subscribers
+{
+  type: 'bid_update',
+  source: 'copart',
+  lotNumber: '12345678',
+  previousBid: 3500,
+  currentBid: 3750,
+  bidCount: 12,
+  saleStatus: 'live',
+  timestamp: '2026-04-06T14:30:00Z'
+}
+
+// Lot status change (sold, cancelled, etc.)
+{
+  type: 'status_change',
+  source: 'copart',
+  lotNumber: '12345678',
+  previousStatus: 'live',
+  currentStatus: 'sold',
+  finalPrice: 4200,
+  timestamp: '2026-04-06T14:35:00Z'
+}
+
+// Pong (keepalive response)
+{ type: 'pong' }
+
+// Error
+{ type: 'error', code: 'RATE_LIMITED', message: 'Too many subscriptions' }
+```
+
+**Limits:** Max 50 lot subscriptions per WebSocket connection. Bid updates are polled from scrapers at `high` priority every 30 seconds for live-auction lots, every 5 minutes for upcoming lots.
+
 ---
 
 ## Deal Analyzer MCP — Tools
@@ -544,8 +654,49 @@ Find comparable sold vehicles to establish post-repair market value. Params: mak
 ### scan_deals
 **Batch search + score + rank.** Proactive deal-finding across both Copart and IAAI simultaneously. Params: make (optional), model (optional), year_min, year_max, damage_types (array), location, radius, price_max, min_profit_target (default $2000), limit (default 25). Runs search on both auction sources, applies the scoring model to each, and returns a ranked list of `DealSummary` objects sorted by deal score descending.
 
+**Pipeline steps:**
+1. **Search both sources** — Run `copart_search` + `iaai_search` in parallel with user criteria. Collect up to `limit * 3` raw listings (over-fetch to account for filtering).
+2. **Quick filter** — Discard listings with `sale_status: 'sold'`, price above `price_max`, or obvious non-starters (Certificate of Destruction title, zero images).
+3. **VIN decode** — Batch decode VINs via shared `vin-decoder.ts` (cached, free NHTSA API). Used for vehicle class determination.
+4. **Heuristic repair estimate** — Apply tier-1 heuristic repair estimate based on `(damage_type, vehicle_class, year_range)`. **No parts lookup** (too slow for batch). **No NMVTIS** (cost guard: $1–2/query).
+5. **Quick market value** — Pull cached sold history comps. If no cache, use heuristic value from VIN decode + listing `retail_value`.
+6. **Quick profit calc** — `estimated_retail - (current_bid + fees + heuristic_repair + transport)`. Discard if below `min_profit_target`.
+7. **Score & rank** — Apply scoring model (margin + risk + liquidity + info scores). Sort descending by `deal_score`.
+8. **Return top N** — Return top `limit` results as `DealSummary[]` with `quick_analysis` one-liner.
+
+> **What scan_deals explicitly skips** (vs. `analyze_vehicle`): No Carfax, no NMVTIS, no vision analysis, no real parts pricing, no transport quotes. These are deferred to per-lot `analyze_vehicle` calls for deals the user wants to investigate further.
+
 ### estimate_transport
-Carrier cost estimation. Params: origin_zip (auction yard), destination_zip, vehicle_type (sedan/suv/truck). Returns: distance_miles, open_carrier_estimate, enclosed_estimate, self_pickup_viable (boolean).
+Carrier cost estimation. Params: origin_zip (auction yard), destination_zip, vehicle_type (sedan/suv/truck), operable (boolean, default true). Returns: distance_miles, open_carrier_estimate, enclosed_estimate, self_pickup_viable (boolean).
+
+**Transport cost model (`transport-calc.ts`):**
+
+Cost is calculated using a distance-based per-mile rate with minimum and surcharges:
+
+```typescript
+interface TransportCostModel {
+  // Base rates (open carrier, per mile)
+  baseCostPerMile: {
+    '0-500': 1.20;      // Short haul: higher per-mile
+    '500-1000': 0.85;    // Medium haul
+    '1000-1500': 0.70;   // Long haul
+    '1500+': 0.58;       // Cross-country
+  };
+  minimumCharge: 250;     // Floor price regardless of distance
+  enclosedMultiplier: 1.5; // 50% premium for enclosed trailer
+  inoperableSurcharge: 150; // Extra for winch/dolly load
+  oversizeMultiplier: {    // Vehicle type multiplier
+    sedan: 1.0;
+    suv: 1.10;
+    truck: 1.15;
+    van: 1.10;
+  };
+}
+```
+
+**Distance calculation:** Zip-to-zip distance is computed via a bundled US zip code centroid table (`config/regions.json`) using the Haversine formula. No external API call required.
+
+**Self-pickup threshold:** `self_pickup_viable` is `true` when `distance_miles < 150`.
 
 ### export_analysis
 Dump analysis results. Params: lot_numbers (array), format (csv|json). Returns file content as string.
@@ -649,6 +800,64 @@ Composite score (0–100) combining:
 - **Liquidity score** (15% weight): How quickly this make/model/year sells in the region (based on comp volume and days-to-sell)
 - **Information score** (15% weight): Bonus for having keys, running/driving, high image count, Carfax available, NMVTIS clear, real parts pricing sourced — more data = higher confidence
 
+### Scoring Formula
+
+```typescript
+function calculateDealScore(
+  margin: ProfitEstimate,
+  risks: RiskFlag[],
+  comps: MarketComps,
+  info: InformationFactors
+): number {
+  const marginScore = clamp(margin.profit_margin_pct * 2, 0, 100);
+  // 20% margin = 40 points, 50% margin = 100 points
+
+  const riskScore = 100 - risks.reduce((penalty, flag) => {
+    const penalties = { info: 0, warning: 15, critical: 35 };
+    return penalty + penalties[flag.severity];
+  }, 0);
+  // Each critical flag costs 35 points, warnings cost 15
+
+  const liquidityScore = clamp(
+    (comps.recentSales.length / 10) * 50 +      // Volume: 10+ comps = 50 pts
+    (comps.confidence === 'high' ? 50 : comps.confidence === 'medium' ? 30 : 10),
+    0, 100
+  );
+
+  const infoScore = [
+    info.hasKeys ? 15 : 0,
+    info.isRunning ? 20 : 0,
+    info.imageCount >= 8 ? 15 : info.imageCount >= 4 ? 10 : 0,
+    info.carfaxAvailable ? 15 : 0,
+    info.nmvtisClear ? 20 : 0,
+    info.realPartsPrice ? 15 : 0,
+  ].reduce((a, b) => a + b, 0);
+
+  const raw =
+    marginScore * 0.40 +
+    Math.max(riskScore, 0) * 0.30 +
+    liquidityScore * 0.15 +
+    infoScore * 0.15;
+
+  return clamp(Math.round(raw), 0, 100);
+}
+```
+
+### Score → Recommendation Mapping
+
+| Score Range | Recommendation | Action |
+|-------------|---------------|--------|
+| 80–100 | `strong_buy` | High confidence, act quickly |
+| 65–79 | `buy` | Good deal, proceed with due diligence |
+| 45–64 | `hold` | Marginal — investigate further or wait for price drop |
+| 0–44 | `avoid` | Risk outweighs reward |
+
+**Hard caps** (override score-based recommendation):
+- Frame damage with severity `structural` → recommendation capped at `hold` regardless of score
+- Any `critical` risk flag → recommendation capped at `hold`
+- Profit margin < 5% → recommendation set to `avoid`
+- Certificate of Destruction title → recommendation set to `avoid`
+
 ## Risk Flags (`risk-flags.ts`)
 
 Automated red flag detection:
@@ -697,6 +906,27 @@ Replaces simple throttling with a priority-aware request queue (`shared/src/prio
 - Starvation prevention: `low` and `background` tasks are guaranteed at least 1 slot per 60s even under sustained high-priority load.
 - The alert poller uses `high` priority for watchlist lots approaching sale date, `normal` for routine checks.
 
+### Rate Limiter ↔ Priority Queue Interaction
+
+The per-package `rate-limiter.ts` and shared `priority-queue.ts` compose as follows:
+
+```
+Tool handler
+  → rate-limiter.ts (per-scraper)
+    → checks daily cap (reject if exceeded with RATE_LIMIT_DAILY_CAP)
+    → assigns priority based on calling context
+    → enqueues into priority-queue.ts (shared singleton)
+      → priority queue sorts by priority level, then FIFO within level
+      → dequeues respecting global token bucket (1 req/3s)
+      → on 403/429 response: triggers exponential backoff in rate-limiter
+        (backoffBaseMs * 2^attempt, capped at backoffMaxMs)
+    → returns result to tool handler
+```
+
+**Scope:** Each scraper package has its own `RateLimiter` instance with independent daily counters and backoff state. The `PriorityRequestQueue` is a **per-process singleton** — when scrapers run in-process via the gateway, all scrapers share one queue and one global rate limit. When scrapers run as separate processes, each has its own queue.
+
+**Gateway coordination:** The gateway does NOT enforce a global cross-process rate limit. Each downstream process self-governs. This is acceptable because each scraper targets a different site (Copart vs IAAI vs Carfax) so their rate limits are independent.
+
 ---
 
 ## Watchlist Storage  [UPDATED]
@@ -724,6 +954,11 @@ CREATE TABLE watchlist_history (
   detected_at TEXT NOT NULL,
   FOREIGN KEY (lot_number) REFERENCES watchlist(lot_number)
 );
+
+-- Indexes for efficient polling and history queries
+CREATE INDEX idx_watchlist_source ON watchlist(source);
+CREATE INDEX idx_watchlist_last_checked ON watchlist(last_checked_at);
+CREATE INDEX idx_watchlist_history_lot ON watchlist_history(lot_number, detected_at);
 ```
 
 All scraper MCPs and the alert poller share the same SQLite database file (WAL mode enabled for concurrent readers + single writer).
@@ -767,6 +1002,33 @@ export function initTracing(serviceName: string) {
 - `scraper.rate_limit.queue_depth` — gauge by priority level
 - `analyzer.pipeline.duration` — histogram for full analysis
 - `analyzer.deal_score.distribution` — histogram of computed scores
+- `nmvtis.daily_spend` — gauge tracking cumulative NMVTIS cost per day
+- `scraper.rate_limit.daily_remaining` — gauge of remaining daily requests per scraper
+
+### Span Naming Conventions
+
+All spans follow the format `{package}.{operation}` for consistency:
+
+| Span Name | Package | Description |
+|-----------|---------|-------------|
+| `copart.search` | copart-scraper-mcp | Search request (including queue wait) |
+| `copart.get_listing` | copart-scraper-mcp | Single lot fetch |
+| `copart.intercept_api` | copart-scraper-mcp | Network API interception attempt |
+| `copart.parse_dom` | copart-scraper-mcp | DOM fallback parsing |
+| `iaai.search` | iaai-scraper-mcp | IAAI search request |
+| `carfax.get_report` | carfax-scraper-mcp | Full Carfax report fetch |
+| `nmvtis.title_check` | nmvtis-mcp | NMVTIS API call |
+| `parts.search` | parts-pricing-mcp | Parts search across sources |
+| `analyzer.pipeline` | deal-analyzer-mcp | Full analyze_vehicle pipeline (parent span) |
+| `analyzer.pipeline.vin_decode` | deal-analyzer-mcp | VIN decode step (child span) |
+| `analyzer.pipeline.vision` | deal-analyzer-mcp | All vision analysis (child span) |
+| `analyzer.pipeline.repair_estimate` | deal-analyzer-mcp | Repair cost estimation (child span) |
+| `analyzer.pipeline.scoring` | deal-analyzer-mcp | Deal scoring (child span) |
+| `gateway.route` | gateway-mcp | Tool call routing |
+| `cache.read` | any | Cache lookup (tag: hit/miss) |
+| `cache.write` | any | Cache store |
+
+**Custom attributes** added to all spans: `tool.name`, `tool.source` (copart/iaai), `cache.hit` (boolean), `queue.priority`, `queue.wait_ms`.
 
 ### Local Dev
 `docker-compose.yml` includes Jaeger for local trace visualization:
@@ -840,6 +1102,140 @@ Standalone service (not an MCP server) that polls watchlists and sends notificat
 | Deal analysis results | 1 hour | SQLite |
 | Watchlist | Persistent | SQLite |
 | Alert state (last-known) | Persistent | SQLite |
+
+---
+
+## Auction Fee Schedules
+
+Stored in `config/fee-schedules.json` and consumed by `fee-calculator.ts`. Update periodically as auction houses change fees.
+
+### Copart Buyer Premiums (public/non-member)
+
+| Bid Range | Premium |
+|-----------|---------|
+| $0 – $99.99 | $1 (internet bid fee) |
+| $100 – $499.99 | $49 |
+| $500 – $999.99 | $49 |
+| $1,000 – $1,499.99 | $99 |
+| $1,500 – $1,999.99 | $149 |
+| $2,000 – $3,999.99 | $199 |
+| $4,000 – $5,999.99 | $299 |
+| $6,000 – $7,999.99 | $399 |
+| $8,000+ | 5% of bid |
+
+Plus flat fees: gate fee ($79), environmental fee ($10 or $15 based on title).
+
+### IAAI Buyer Premiums (public buyer)
+
+| Bid Range | Premium |
+|-----------|---------|
+| $0 – $99.99 | $25 |
+| $100 – $199.99 | $50 |
+| $200 – $299.99 | $70 |
+| $300 – $349.99 | $80 |
+| $350 – $399.99 | $80 |
+| $400 – $449.99 | $95 |
+| $450 – $499.99 | $95 |
+| $500 – $549.99 | $110 |
+| $550 – $599.99 | $110 |
+| $600 – $699.99 | $120 |
+| $700 – $799.99 | $135 |
+| $800 – $899.99 | $135 |
+| $900 – $999.99 | $145 |
+| $1,000 – $1,199.99 | $160 |
+| $1,200 – $1,299.99 | $170 |
+| $1,300 – $1,499.99 | $185 |
+| $1,500 – $1,999.99 | $200 |
+| $2,000 – $2,499.99 | $230 |
+| $2,500 – $2,999.99 | $260 |
+| $3,000 – $3,499.99 | $290 |
+| $3,500 – $3,999.99 | $315 |
+| $4,000 – $4,499.99 | $335 |
+| $4,500 – $4,999.99 | $355 |
+| $5,000 – $5,999.99 | $375 |
+| $6,000 – $7,499.99 | $400 |
+| $7,500 – $9,999.99 | $450 |
+| $10,000 – $14,999.99 | 5% of bid |
+| $15,000+ | 5% of bid |
+
+Plus flat fees: internet bid fee ($100), environmental fee ($15), title processing ($15–$30).
+
+### Fee Calculator Interface
+
+```typescript
+interface FeeOptions {
+  memberType?: 'public' | 'dealer' | 'broker';
+  bidType?: 'online' | 'in_person';
+  state?: string;               // For state-specific title/env fees
+}
+
+interface FeeBreakdown {
+  buyerPremium: number;
+  gateFee: number;
+  titleFee: number;
+  environmentalFee: number;
+  virtualBidFee: number;        // $0 if in-person
+  technologyFee: number;        // IAAI-specific
+  totalFees: number;
+}
+
+function calculateCopartFees(bidAmount: number, options?: FeeOptions): FeeBreakdown;
+function calculateIaaiFees(bidAmount: number, options?: FeeOptions): FeeBreakdown;
+```
+
+---
+
+## ESLint & Prettier Configuration
+
+ESLint uses the flat config format (`eslint.config.js` at root):
+
+```javascript
+// eslint.config.js
+import eslint from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import prettier from 'eslint-config-prettier';
+
+export default tseslint.config(
+  eslint.configs.recommended,
+  ...tseslint.configs.strict,
+  prettier,
+  {
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/consistent-type-imports': 'error',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+    },
+  },
+  {
+    ignores: ['**/dist/**', '**/data/**', '**/node_modules/**'],
+  }
+);
+```
+
+Prettier config (`.prettierrc`):
+
+```json
+{
+  "semi": true,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "printWidth": 100,
+  "tabWidth": 2
+}
+```
+
+Root `package.json` scripts:
+```json
+{
+  "scripts": {
+    "lint": "eslint packages/ alerts/",
+    "lint:fix": "eslint --fix packages/ alerts/",
+    "format": "prettier --write 'packages/*/src/**/*.ts' 'alerts/src/**/*.ts'",
+    "format:check": "prettier --check 'packages/*/src/**/*.ts' 'alerts/src/**/*.ts'"
+  }
+}
+```
 
 ---
 
@@ -927,6 +1323,176 @@ interface DealSummary {
   risk_flags: RiskFlag[];
   sale_date: string;
   listing_url: string;
+}
+
+// --- Error types ---
+type ErrorCode =
+  | 'SCRAPER_ERROR'              // Generic scraper failure
+  | 'CAPTCHA_DETECTED'           // CAPTCHA encountered, cannot proceed
+  | 'RATE_LIMITED'               // 429 or per-request rate limit
+  | 'RATE_LIMIT_DAILY_CAP'       // Daily request cap exceeded
+  | 'CACHE_ERROR'                // Cache read/write failure
+  | 'ANALYSIS_ERROR'             // Deal analysis pipeline failure
+  | 'VALIDATION_ERROR'           // Invalid input (bad VIN, lot number, zip)
+  | 'AUTH_ERROR'                 // Login failed for auction site
+  | 'NOT_FOUND'                  // Lot/stock number not found
+  | 'TIMEOUT'                    // Navigation or API call timeout
+  | 'NMVTIS_COST_GUARD'          // NMVTIS called in batch context
+  | 'DOWNSTREAM_UNAVAILABLE'     // Gateway: downstream server down
+  | 'VISION_ERROR';              // AI vision analysis failure
+
+interface ToolResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: {
+    code: ErrorCode;
+    message: string;
+    retryable: boolean;
+    retryAfterMs?: number;       // Present for RATE_LIMITED errors
+  };
+  cached: boolean;
+  stale: boolean;                // True when returning expired cache on failure
+  timestamp: string;             // ISO 8601
+}
+
+// --- Source-specific raw types (pre-normalization) ---
+interface CopartRawListing {
+  lotNumberStr: string;
+  mkn: string;                  // Make name
+  mmod: string;                 // Model
+  lcy: number;                  // Year
+  dd: string;                   // Primary damage description
+  sdd?: string;                 // Secondary damage
+  orr: number;                  // Odometer reading
+  odometerBrand: string;
+  la: string;                   // Location / auction yard
+  dynamicBidAmount: number;
+  bin?: number;                 // Buy It Now
+  tims: { full: string[] };     // Image URLs
+  ad: string;                   // Auction date
+  hk: boolean;                  // Has keys
+  dr: boolean;                  // Driveable
+  ts: string;                   // Title state
+  tt: string;                   // Title type
+  [key: string]: unknown;
+}
+
+interface IaaiRawListing {
+  stockNumber: string;
+  year: number;
+  makeName: string;
+  modelName: string;
+  primaryDamage: string;
+  secondaryDamage?: string;
+  odometerReading: number;
+  odometerUnit: string;
+  branch: string;               // IAAI branch = location
+  currentBid: number;
+  buyNowPrice?: number;
+  saleDate: string;
+  hasKeys: string;              // "YES" | "NO" string, not boolean
+  titleState: string;
+  titleCode: string;
+  images: { url: string; seq: number }[];
+  [key: string]: unknown;
+}
+
+// --- Carfax sub-record types ---
+interface ServiceRecord {
+  date: string;
+  mileage?: number;
+  description: string;
+  facility?: string;
+  location?: string;
+}
+
+interface RecallRecord {
+  campaignNumber: string;
+  date: string;
+  component: string;
+  description: string;
+  remedy: string;
+  status: 'open' | 'completed' | 'unknown';
+}
+
+// --- NMVTIS sub-record types ---
+interface NmvtisTitleRecord {
+  state: string;
+  date: string;
+  titleType: string;
+  brandCodes: string[];
+  brandDescriptions: string[];
+  odometer?: number;
+  odometerStatus?: string;
+}
+
+interface InsuranceLossRecord {
+  date: string;
+  insurer?: string;
+  claimType: string;            // "Total Loss", "Theft", "Recovered Theft"
+  disposition?: string;
+}
+
+interface JunkSalvageRecord {
+  reportedBy: string;
+  date: string;
+  disposition: string;          // "Crushed", "Sold", "Rebuilt", "Retained"
+  state?: string;
+}
+
+interface OdometerRecord {
+  date: string;
+  reading: number;
+  source: string;               // "Title", "Inspection", "Service"
+  status: 'ok' | 'discrepancy' | 'rollback_suspected' | 'exceeds_limit';
+}
+
+// --- Market & transport types ---
+interface CarrierQuote {
+  carrier: string;
+  type: 'open' | 'enclosed';
+  price: number;
+  estimatedDays: number;
+  rating?: number;              // 1-5 carrier rating
+  url?: string;
+}
+
+interface ValueAdjustment {
+  factor: string;               // "mileage", "title_type", "damage", "region"
+  adjustment: number;           // Dollar amount (+/-)
+  reason: string;
+}
+
+// --- Repair types ---
+interface RepairEstimate {
+  totalCost: number;
+  confidence: 'low' | 'medium' | 'high';
+  source: 'heuristic' | 'parts_lookup' | 'image_analysis' | 'combined';
+  lineItems: RepairLineItem[];
+  paintMultiplier: number;      // From vision paint analyzer (1.0 default)
+  severityMultiplier: number;   // From vision damage classifier (1.0 default)
+  frameCostAdditional: number;  // From vision frame inspector ($0 default)
+}
+
+interface RepairLineItem {
+  description: string;
+  partCost: number;
+  laborCost: number;
+  laborHours: number;
+  partSource?: string;
+  lineTotal: number;
+}
+
+// --- Browser config ---
+interface BrowserConfig {
+  headless: boolean;
+  viewport: { width: number; height: number };
+  userAgent?: string;           // null = rotate from stealth pool
+  proxyUrl?: string;            // From PROXY_URL env var
+  navigationTimeoutMs: number;
+  actionDelayMinMs: number;
+  actionDelayMaxMs: number;
+  scrollSteps: number;
 }
 ```
 
