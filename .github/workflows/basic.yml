@@ -13,13 +13,17 @@ jobs:
         node-version: [20]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
       - name: Detect project files
         id: project-files
         shell: bash
         run: |
+          if [ -f package.json ] && { [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; }; then
+            echo "has_npm_lockfile=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_npm_lockfile=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Node.js checks because no root package.json and npm lockfile were found."
+          fi
+
           if [ -f package.json ]; then
             echo "has_package_json=true" >> "$GITHUB_OUTPUT"
           else
@@ -43,18 +47,23 @@ jobs:
           else
             echo "has_prettier_config=false" >> "$GITHUB_OUTPUT"
           fi
+      - uses: actions/setup-node@v4
+        if: steps.project-files.outputs.has_npm_lockfile == 'true'
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
       - name: Install dependencies
-        if: steps.project-files.outputs.has_package_json == 'true'
+        if: steps.project-files.outputs.has_npm_lockfile == 'true'
         run: npm ci
       - name: Build TypeScript
-        if: steps.project-files.outputs.has_package_json == 'true' && steps.project-files.outputs.has_tsconfig == 'true'
+        if: steps.project-files.outputs.has_npm_lockfile == 'true' && steps.project-files.outputs.has_tsconfig == 'true'
         run: npx tsc --build
       - name: Run tests
-        if: steps.project-files.outputs.has_package_json == 'true'
+        if: steps.project-files.outputs.has_npm_lockfile == 'true'
         run: npm run test --workspaces --if-present -- --coverage
       - name: Lint
-        if: steps.project-files.outputs.has_package_json == 'true' && steps.project-files.outputs.has_eslint_config == 'true'
+        if: steps.project-files.outputs.has_npm_lockfile == 'true' && steps.project-files.outputs.has_eslint_config == 'true'
         run: npx eslint .
       - name: Check formatting
-        if: steps.project-files.outputs.has_package_json == 'true' && steps.project-files.outputs.has_prettier_config == 'true'
+        if: steps.project-files.outputs.has_npm_lockfile == 'true' && steps.project-files.outputs.has_prettier_config == 'true'
         run: npx prettier --check .
