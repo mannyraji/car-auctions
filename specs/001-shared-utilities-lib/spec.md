@@ -114,6 +114,34 @@ An operator monitoring the system in production needs distributed tracing across
 - What happens when the auction normalizer encounters an unknown IAAI `titleCode`? It must map to a sensible default (e.g., `"Unknown"`) and log a warning rather than throwing.
 - What happens when two scrapers running in the same process both try to shut down the browser pool? Shutdown must be idempotent and reference-counted.
 - What happens when the OTEL endpoint is set but unreachable? Tracing must fail silently and not block or crash the application.
+- What happens when the VIN cache database is corrupted? The VIN decoder must detect corruption, log a warning, and proceed without caching (degrade gracefully).
+- What happens when a browser context hangs or becomes unresponsive? The browser pool must detect the timeout and force-close the context without affecting other contexts.
+- What happens when the priority queue overflows? The queue must enforce a configurable maximum depth (default: 1000) and reject new requests with a `RATE_LIMIT_QUEUE_FULL` error when exceeded.
+- What happens when a `critical` priority request arrives while the token bucket is empty? It must still wait for the next token (respecting rate limits) but bypass queue ordering.
+- What happens when the normalizer receives a null or undefined raw listing? It must throw a validation error rather than producing a partial result.
+
+---
+
+### Additional Acceptance Scenarios
+
+**Browser Pool Edge Cases**:
+1. **Given** a browser pool with maxContexts=3 and 3 active contexts, **When** a fourth context is requested, **Then** the request queues until a context is released (no new browser spawned)
+2. **Given** a browser context that exceeds the idle timeout (30s default), **When** the pool performs cleanup, **Then** the idle context is closed and resources freed
+3. **Given** a browser crash during an active operation, **When** detected by the pool, **Then** a new browser instance is spawned and pending requests are retried
+
+**Priority Queue Edge Cases**:
+1. **Given** a queue at maximum depth (1000 requests), **When** a new request arrives, **Then** the request is rejected with error code `RATE_LIMIT_QUEUE_FULL` and `retryable: true`
+2. **Given** the token bucket is empty and a `critical` request arrives, **When** the next token is available (≤3s), **Then** the critical request executes first (ahead of queued `high`/`normal` requests)
+3. **Given** 100 `high` priority requests enqueued, **When** a `low` priority request has waited 60 seconds, **Then** the `low` request executes next (starvation prevention triggers)
+
+**VIN Decoder Edge Cases**:
+1. **Given** a VIN that NHTSA returns incomplete data for (missing model year), **When** decoded, **Then** the result includes all available fields with missing fields as `null`, not throwing
+2. **Given** the VIN cache SQLite file is locked by another process, **When** a cache write is attempted, **Then** the decoder proceeds without caching (logs warning, returns result)
+3. **Given** a network timeout to NHTSA API (>5s), **When** decode is attempted, **Then** a `TIMEOUT` error is returned with `retryable: true`
+
+**Tracing Edge Cases**:
+1. **Given** `OTEL_EXPORTER_OTLP_ENDPOINT` points to an unreachable host, **When** spans are emitted, **Then** tracing fails silently with no impact on application performance
+2. **Given** tracing is initialized multiple times in the same process, **When** the second call occurs, **Then** the existing tracer is returned (singleton behavior)
 
 ## Requirements *(mandatory)*
 
@@ -125,7 +153,7 @@ An operator monitoring the system in production needs distributed tracing across
 - **FR-004**: The library MUST define shared interfaces for Carfax sub-records (`ServiceRecord`, `RecallRecord`), NMVTIS sub-records (`NmvtisTitleRecord`, `InsuranceLossRecord`, `JunkSalvageRecord`, `OdometerRecord`), and the `ErrorCode` union type
 - **FR-005**: The auction normalizer MUST convert raw Copart responses into the `AuctionListing` shape with correct field mapping (e.g., `lotNumberStr` → `lot_number`, `mkn` → `make`, `dd` → `damage_primary`)
 - **FR-006**: The auction normalizer MUST convert raw IAAI responses into the `AuctionListing` shape, including type coercions (`hasKeys: "YES"/"NO"` → `boolean`) and code-to-label mappings (`titleCode: "SV"` → `"Salvage"`, `"CL"` → `"Clean"`, `"RB"` → `"Rebuilt"`)
-- **FR-007**: The auction normalizer MUST handle unknown or missing fields gracefully by using sensible defaults and never throwing on unexpected input
+- **FR-007**: The auction normalizer MUST handle unknown or missing *optional* fields gracefully by using sensible defaults and never throwing on unexpected input. Required identifiers (`lot_number`, `vin`) throw a `VALIDATION_ERROR` if missing.
 - **FR-008**: The VIN decoder MUST validate VINs before making API calls: exactly 17 alphanumeric characters, rejecting I, O, and Q
 - **FR-009**: The VIN decoder MUST return structured vehicle specifications including at minimum: year, make, model, trim, engine type, body class, drive type, fuel type, and transmission
 - **FR-010**: The VIN decoder MUST support caching of results with a 90-day TTL via a pluggable `VinCache` interface (with `get(vin)` and `set(vin, result, ttl)` methods). A default `better-sqlite3` implementation MUST be provided (WAL mode, stored at `data/vin-cache.sqlite`, gitignored) and an in-memory LRU fallback MUST be available for testing. When no cache is injected, the decoder MUST still function correctly without caching
@@ -154,6 +182,11 @@ An operator monitoring the system in production needs distributed tracing across
 - **RiskFlag**: A warning or alert about a vehicle. Has a type (title wash, flood, odometer rollback, etc.), severity (info/warning/critical), and human-readable detail string.
 - **DealAnalysis**: The complete output of analyzing a vehicle. Aggregates listing data, VIN decode, history reports, profit estimate, repair quote, deal score, risk flags, and optional vision analysis.
 - **PriorityRequest**: A queued scrape request with an assigned priority level, enqueue timestamp, and the operation to execute. Ordered by priority then FIFO within each level.
+- **DamageImage**: A vehicle damage photo with base64-encoded image data, MIME type, and optional label (e.g., "front", "rear", "undercarriage"). Used by AI vision analysis in `DealAnalysis.images`.
+- **CarfaxSummary**: A condensed vehicle history summary extracted from Carfax. Includes accident count, owner count, title brand, service record count, and overall risk assessment. Used by `DealAnalysis.carfax_summary`.
+- **WatchlistEntry**: A tracked auction lot with lot number, source, VIN, current bid, sale date, and alert preferences (bid threshold, notification channels). Stored in per-scraper SQLite watchlist tables.
+- **WatchlistHistoryEntry**: A point-in-time snapshot of a watched lot's state (bid amount, sale status) captured during each poll cycle. Used for change detection and alert triggering.
+- **RepairQuote**: The output of `repair_build_quote` — aggregates multiple `RepairLineItem` entries with total parts cost, total labor cost, and combined estimate. Referenced as `repair_quote` in `DealAnalysis`.
 
 ## Success Criteria *(mandatory)*
 
@@ -167,7 +200,375 @@ An operator monitoring the system in production needs distributed tracing across
 - **SC-006**: Enabling OpenTelemetry tracing adds less than 5% overhead to tool call latency
 - **SC-007**: The browser pool reuses a single browser instance across multiple concurrent context requests, keeping peak memory usage proportional to context count, not browser count
 - **SC-008**: All shared types compile with TypeScript strict mode enabled and produce zero type errors
-- **SC-009**: The auction normalizer handles 100% of known IAAI title codes (`SV`, `CL`, `RB`) and degrades gracefully for unknown codes
+- **SC-009**: The auction normalizer handles 100% of known IAAI title codes (`SV`, `CL`, `RB`, `JK`, `LL`, `FL`, `OD`, `RC`) and degrades gracefully for unknown codes
+
+## Implementation Specifications
+
+### Error Class Structure
+
+All error classes extend the base `Error` class and implement a common interface:
+
+```typescript
+interface BaseErrorFields {
+  code: ErrorCode;          // Machine-readable error code
+  message: string;          // Human-readable description
+  retryable: boolean;       // Whether the operation can be retried
+  retryAfterMs?: number;    // Suggested wait time before retry (if retryable)
+  context?: Record<string, unknown>;  // Additional context data
+}
+```
+
+**Error Classes and Default Retryability**:
+
+| Error Class | Default `retryable` | Typical `retryAfterMs` | Context Fields |
+|-------------|---------------------|------------------------|----------------|
+| `ScraperError` | `true` | 5000 | `url`, `source` (copart/iaai), `statusCode` |
+| `CaptchaError` | `false` | — | `url`, `source`, `captchaType` |
+| `RateLimitError` | `true` | Exponential backoff | `source`, `dailyRemaining`, `resetAt` |
+| `CacheError` | `false` | — | `operation` (read/write), `key` |
+| `AnalysisError` | Depends on cause | — | `stage`, `vehicleVin` |
+
+**ErrorCode to Retryability Mapping**:
+
+| ErrorCode | `retryable` | Notes |
+|-----------|-------------|-------|
+| `SCRAPER_ERROR` | `true` | Transient scraper failures |
+| `CAPTCHA_DETECTED` | `false` | Requires human intervention |
+| `RATE_LIMITED` | `true` | Wait for `retryAfterMs` |
+| `RATE_LIMIT_DAILY_CAP` | `false` | Daily limit reached |
+| `RATE_LIMIT_QUEUE_FULL` | `true` | Queue overflow, retry later |
+| `CACHE_ERROR` | `false` | Cache corruption/failure |
+| `ANALYSIS_ERROR` | `false` | Logic error in analysis |
+| `VALIDATION_ERROR` | `false` | Invalid input data |
+| `AUTH_ERROR` | `false` | Credential failure |
+| `NOT_FOUND` | `false` | Resource doesn't exist |
+| `TIMEOUT` | `true` | Network/operation timeout |
+| `NMVTIS_COST_GUARD` | `false` | Cost protection triggered |
+| `DOWNSTREAM_UNAVAILABLE` | `true` | Downstream service down |
+| `VISION_ERROR` | `true` | Vision API failure |
+
+---
+
+### VinCache Interface Specification
+
+```typescript
+interface VinCacheEntry {
+  vin: string;
+  result: VINDecodeResult;
+  cachedAt: number;       // Unix timestamp ms
+  expiresAt: number;      // Unix timestamp ms
+}
+
+interface VinCache {
+  /** Get cached decode result. Returns null if not found or expired. */
+  get(vin: string): Promise<VINDecodeResult | null>;
+  
+  /** Store decode result with TTL. */
+  set(vin: string, result: VINDecodeResult, ttlMs: number): Promise<void>;
+  
+  /** Remove cached entry. Returns true if entry existed. */
+  delete(vin: string): Promise<boolean>;
+  
+  /** Clear all expired entries (optional garbage collection). */
+  prune?(): Promise<number>;
+}
+```
+
+**SQLite Cache Schema** (default `better-sqlite3` implementation):
+
+```sql
+CREATE TABLE IF NOT EXISTS vin_cache (
+  vin TEXT PRIMARY KEY,
+  result_json TEXT NOT NULL,
+  cached_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_vin_cache_expires ON vin_cache(expires_at);
+```
+
+**TTL Management**: Lazy deletion on read. When `get()` finds an expired entry, it deletes it and returns `null`. Optional `prune()` method for batch cleanup.
+
+**Corruption Recovery**: If SQLite throws a `SQLITE_CORRUPT` error, the cache implementation logs a warning and returns `null` for reads, no-ops for writes. The decoder continues functioning without cache.
+
+---
+
+### MCP Server Bootstrap Specification
+
+```typescript
+type TransportType = 'stdio' | 'sse' | 'websocket';
+
+interface McpServerOptions {
+  /** Server name for identification */
+  name: string;
+  
+  /** Server version */
+  version: string;
+  
+  /** Transport type. Overridden by TRANSPORT env var if set. */
+  transport?: TransportType;
+  
+  /** Port for SSE/WebSocket transports. Defaults to PORT env var or 3000. */
+  port?: number;
+  
+  /** Endpoint path for SSE/WebSocket. Defaults to '/mcp'. */
+  path?: string;
+  
+  /** Tool definitions to register */
+  tools: ToolDefinition[];
+  
+  /** Resource definitions (optional) */
+  resources?: ResourceDefinition[];
+  
+  /** Called on server shutdown */
+  onShutdown?: () => Promise<void>;
+}
+
+interface McpServer {
+  /** Start listening (for SSE/WebSocket) or attach to stdio */
+  start(): Promise<void>;
+  
+  /** Graceful shutdown */
+  stop(): Promise<void>;
+  
+  /** Current transport type */
+  readonly transport: TransportType;
+  
+  /** Port (for SSE/WebSocket) */
+  readonly port?: number;
+}
+
+function createMcpServer(options: McpServerOptions): McpServer;
+```
+
+**Transport Selection Priority**: Function parameter `transport` < Environment variable `TRANSPORT` (case-insensitive).
+
+**SSE Transport**: Listens on `http://0.0.0.0:{port}{path}` with SSE event stream. Uses JSON-RPC 2.0 over SSE events.
+
+**WebSocket Transport**: Listens on `ws://0.0.0.0:{port}{path}` with JSON-RPC 2.0 messages.
+
+---
+
+### Browser Pool Specification
+
+```typescript
+interface BrowserPoolOptions {
+  /** Maximum concurrent browser contexts. Default: 3 */
+  maxContexts?: number;
+  
+  /** Enable stealth plugin for fingerprint masking. Default: true */
+  stealth?: boolean;
+  
+  /** Proxy URL (overridden by PROXY_URL env var). */
+  proxy?: string;
+  
+  /** Browser launch timeout in ms. Default: 30000 */
+  launchTimeout?: number;
+  
+  /** Idle context timeout before auto-close in ms. Default: 30000 */
+  idleTimeout?: number;
+  
+  /** Playwright browser type. Default: 'chromium' */
+  browserType?: 'chromium' | 'firefox' | 'webkit';
+  
+  /** Additional Playwright launch options */
+  launchOptions?: PlaywrightLaunchOptions;
+}
+
+interface BrowserContext {
+  /** Playwright BrowserContext instance */
+  readonly context: PlaywrightBrowserContext;
+  
+  /** Release context back to pool (do not close manually) */
+  release(): Promise<void>;
+  
+  /** Context creation timestamp */
+  readonly createdAt: number;
+}
+
+class BrowserPool {
+  constructor(options?: BrowserPoolOptions);
+  
+  /** Acquire a browser context. Queues if at capacity. */
+  acquire(): Promise<BrowserContext>;
+  
+  /** Graceful shutdown. Closes all contexts and browser. */
+  shutdown(): Promise<void>;
+  
+  /** Current active context count */
+  readonly activeCount: number;
+  
+  /** Current queued request count */
+  readonly queuedCount: number;
+}
+```
+
+**Lifecycle**: Browser instance is lazily launched on first `acquire()`. Single browser instance shared across all contexts. Browser automatically restarts on crash.
+
+**Stealth Integration**: When `stealth: true`, the `puppeteer-extra-plugin-stealth` plugin is applied to mask browser fingerprints.
+
+**Reference Counting**: `shutdown()` is idempotent. Multiple calls from different consumers are safe; actual shutdown occurs when reference count reaches zero.
+
+---
+
+### Priority Queue Specification
+
+```typescript
+type PriorityLevel = 'critical' | 'high' | 'normal' | 'low' | 'background';
+
+interface PriorityRequest<T = unknown> {
+  /** Unique request ID */
+  id: string;
+  
+  /** Priority level */
+  priority: PriorityLevel;
+  
+  /** The async operation to execute */
+  execute: () => Promise<T>;
+  
+  /** Enqueue timestamp (auto-set by queue) */
+  enqueuedAt: number;
+  
+  /** Optional timeout in ms (default: 30000) */
+  timeout?: number;
+}
+
+interface TokenBucketConfig {
+  /** Tokens added per second. Default: 0.333 (1 req per 3s) */
+  tokensPerSecond?: number;
+  
+  /** Maximum token accumulation. Default: 1 */
+  maxTokens?: number;
+  
+  /** Initial token count. Default: maxTokens */
+  initialTokens?: number;
+}
+
+interface PriorityQueueOptions {
+  /** Token bucket rate limiting config */
+  tokenBucket?: TokenBucketConfig;
+  
+  /** Maximum queue depth before rejecting. Default: 1000 */
+  maxQueueDepth?: number;
+  
+  /** Starvation prevention window in ms. Default: 60000 */
+  starvationWindowMs?: number;
+}
+
+class PriorityQueue {
+  constructor(options?: PriorityQueueOptions);
+  
+  /** Enqueue a request. Returns promise resolving to result or rejecting with error. */
+  enqueue<T>(request: Omit<PriorityRequest<T>, 'id' | 'enqueuedAt'>): Promise<T>;
+  
+  /** Current queue depth by priority */
+  getDepth(): Record<PriorityLevel, number>;
+  
+  /** Graceful shutdown. Rejects pending requests. */
+  shutdown(): Promise<void>;
+}
+```
+
+**Priority Behavior**:
+
+| Priority | Max Wait | Behavior |
+|----------|----------|----------|
+| `critical` | Immediate | Bypasses queue ordering, still respects rate limit |
+| `high` | 2s | Preempts `normal`/`low`/`background` |
+| `normal` | 5s | Default priority |
+| `low` | 10s | Yields to higher priorities |
+| `background` | 30s | Lowest priority, best-effort |
+
+**Starvation Prevention**: A sliding window counter tracks `low`/`background` execution. If 60 seconds pass without either executing, the next dequeue promotes the oldest `low`/`background` request regardless of pending higher-priority requests.
+
+**Token Bucket Algorithm**: Default configuration: 0.333 tokens/second (1 request per 3 seconds), max burst of 1 token. Tokens accumulate when queue is idle. `critical` requests still consume tokens but bypass ordering.
+
+---
+
+### Auction Normalizer Field Defaults
+
+When a field is missing or invalid in the raw source data, the normalizer applies these defaults:
+
+| Field | Default Value | Notes |
+|-------|---------------|-------|
+| `lot_number` | Required | Throws if missing |
+| `vin` | Required | Throws if missing or invalid |
+| `source` | Auto-set | `'copart'` or `'iaai'` based on normalizer |
+| `year` | `null` | Numeric or null |
+| `make` | `'Unknown'` | String |
+| `model` | `'Unknown'` | String |
+| `trim` | `null` | Optional |
+| `title_type` | `'Unknown'` | See title code mapping |
+| `damage_primary` | `'Unknown'` | String |
+| `damage_secondary` | `null` | Optional |
+| `has_keys` | `false` | Boolean (defaults to `false` when unknown) |
+| `odometer` | `null` | Number or null |
+| `odometer_status` | `'actual'` | `'actual'` \| `'exempt'` \| `'not_actual'` \| `'exceeds_limit'` |
+| `current_bid` | `0` | Non-negative number |
+| `buy_now_price` | `null` | Optional |
+| `sale_date` | `null` | ISO 8601 string or null |
+| `sale_status` | `'upcoming'` | `'upcoming'` \| `'live'` \| `'sold'` \| `'cancelled'` |
+| `location` | `null` | Location object or null |
+
+---
+
+### IAAI Title Code Mapping
+
+Complete mapping from IAAI `titleCode` values to human-readable labels:
+
+| Code | Label | Notes |
+|------|-------|-------|
+| `CL` | `Clean` | No title brand |
+| `SV` | `Salvage` | Salvage title brand |
+| `RB` | `Rebuilt` | Rebuilt/reconstructed title |
+| `JK` | `Junk` | Junk certificate |
+| `LL` | `Lemon Law` | Lemon law buyback |
+| `FL` | `Flood` | Flood damage brand |
+| `OD` | `Odometer Problem` | Odometer discrepancy |
+| `RC` | `Reconstructed` | Reconstructed title |
+| `null` / `undefined` / `''` | `Unknown` | Missing or empty value |
+| Other | `Unknown` | Log warning for unmapped codes |
+
+---
+
+### OpenTelemetry Tracing Specification
+
+```typescript
+interface TracingConfig {
+  /** Service name for span attribution. Required. */
+  serviceName: string;
+  
+  /** Service version. Optional. */
+  serviceVersion?: string;
+  
+  /** OTLP endpoint. Overridden by OTEL_EXPORTER_OTLP_ENDPOINT env var. */
+  endpoint?: string;
+}
+
+interface SpanAttributes {
+  'tool.name'?: string;       // e.g., 'copart_search'
+  'tool.source'?: string;     // 'copart' | 'iaai'
+  'cache.hit'?: boolean;      // Whether result came from cache
+  'queue.priority'?: string;  // Priority level
+  'queue.wait_ms'?: number;   // Time spent waiting in queue
+  [key: string]: string | number | boolean | undefined;
+}
+
+/** Initialize tracing. Call once at application startup. */
+function initTracing(config: TracingConfig): void;
+
+/** Execute an operation within a span. */
+function withSpan<T>(
+  name: string,
+  fn: (span: Span) => Promise<T>,
+  attributes?: SpanAttributes
+): Promise<T>;
+```
+
+**No-Op Behavior**: If `OTEL_EXPORTER_OTLP_ENDPOINT` is not set and `config.endpoint` is not provided, `initTracing()` creates a no-op tracer. All `withSpan()` calls execute the function directly without span creation. Overhead: <1ms per call.
+
+**Singleton**: `initTracing()` is idempotent. Subsequent calls return the existing tracer.
+
+**Span Naming**: Use convention `{package}.{operation}`, e.g., `copart.search`, `cache.read`, `analyzer.pipeline`.
 
 ## Public API Surface
 
@@ -176,11 +577,25 @@ The following is the definitive export contract for `@car-auctions/shared`. All 
 ```typescript
 // Types & interfaces (re-exported from types/index.ts)
 export type {
+  // Auction data
   AuctionListing, CopartRawListing, IaaiRawListing,
+  
+  // Deal analysis
   DealAnalysis, DealSummary, RiskFlag,
   VINDecodeResult, ProfitEstimate,
-  RepairEstimate, RepairLineItem,
+  RepairEstimate, RepairQuote, RepairLineItem,
   CarrierQuote, ValueAdjustment,
+  
+  // Vision analysis types
+  DamageImage, DamageClassification, PaintAnalysis, FrameInspection,
+  
+  // Report types
+  NMVTISResult, TitleComparison, CarfaxSummary,
+  
+  // Watchlist types
+  WatchlistEntry, WatchlistHistoryEntry,
+  
+  // Infrastructure
   BrowserConfig,
   ToolResponse, ErrorCode,
   ServiceRecord, RecallRecord,
@@ -194,19 +609,19 @@ export { ScraperError, CaptchaError, RateLimitError, CacheError, AnalysisError }
 export { normalizeCopart, normalizeIaai } from './normalizer'
 
 // VIN decoder
-export { decodeVin, validateVin, type VinCache } from './vin-decoder'
+export { decodeVin, validateVin, type VinCache, type VinCacheEntry } from './vin-decoder'
 
 // MCP server bootstrap
-export { createMcpServer, type McpServerOptions } from './mcp-helpers'
+export { createMcpServer, type McpServerOptions, type TransportType } from './mcp-helpers'
 
 // Browser pool
-export { BrowserPool, type BrowserPoolOptions } from './browser-pool'
+export { BrowserPool, type BrowserPoolOptions, type BrowserContext } from './browser-pool'
 
 // Priority queue
-export { PriorityQueue, type PriorityLevel, type PriorityRequest } from './priority-queue'
+export { PriorityQueue, type PriorityLevel, type PriorityRequest, type TokenBucketConfig } from './priority-queue'
 
 // OpenTelemetry tracing
-export { initTracing, withSpan, type SpanAttributes } from './tracing'
+export { initTracing, withSpan, type SpanAttributes, type TracingConfig } from './tracing'
 ```
 
 Internal modules (e.g., parser helpers, IAAI code maps) MUST NOT be exported. Consumers that need access to internals should request a new public API.

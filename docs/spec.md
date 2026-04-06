@@ -1331,6 +1331,7 @@ type ErrorCode =
   | 'CAPTCHA_DETECTED'           // CAPTCHA encountered, cannot proceed
   | 'RATE_LIMITED'               // 429 or per-request rate limit
   | 'RATE_LIMIT_DAILY_CAP'       // Daily request cap exceeded
+  | 'RATE_LIMIT_QUEUE_FULL'      // Priority queue overflow, retry later
   | 'CACHE_ERROR'                // Cache read/write failure
   | 'ANALYSIS_ERROR'             // Deal analysis pipeline failure
   | 'VALIDATION_ERROR'           // Invalid input (bad VIN, lot number, zip)
