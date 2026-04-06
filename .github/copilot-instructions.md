@@ -1,5 +1,7 @@
 # Car Auctions MCP Monorepo — Copilot Instructions
 
+> **Shared Standards**: See `.github/copilot-shared/instructions/coding-standards.md` for universal development standards (credential management, input validation principles, SQL safety, error handling, testing philosophy) that apply across all projects.
+
 ## Architecture
 
 TypeScript npm monorepo with 9 workspace packages: 7 MCP (Model Context Protocol) servers, 1 shared utility library, and 1 standalone alerts service. Purpose: AI-powered deal analysis for salvage auction car flippers.
@@ -118,12 +120,15 @@ All tools return structured MCP errors.
 - **Lot number**: alphanumeric only
 - **Zip code**: 5-digit numeric
 
-### Security
+### Security (Project-Specific)
 
-- All credentials from `.env` via `dotenv` — never hardcode
+> General security principles (credential handling, SQL safety, SSRF prevention) are in the shared coding standards.
+
+Project-specific security rules:
+- **Credential env vars**: `COPART_EMAIL`, `COPART_PASSWORD`, `IAAI_EMAIL`, `IAAI_PASSWORD`, `CARFAX_EMAIL`, `CARFAX_PASSWORD`, `NMVTIS_API_KEY`, `EBAY_APP_ID`, `RESEND_API_KEY`, `SLACK_WEBHOOK_URL`
 - SQLite databases in `data/` directories (gitignored)
-- Proxy URL from env, rotation on failure
-- NMVTIS cost guard: only called during single-lot `analyze_vehicle`, **never** during `scan_deals` batch operations ($1–2 per query)
+- Proxy URL from `process.env.PROXY_URL`, rotation on failure
+- **NMVTIS cost guard** ($1–2 per query): only called during single-lot `analyze_vehicle`, **never** during `scan_deals` batch operations
 
 ## Testing Strategy (Vitest)
 
