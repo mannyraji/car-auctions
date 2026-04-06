@@ -107,8 +107,20 @@ async function startSse(
 
   app.get('/sse', (_req, res) => {
     const transport = new SSEServerTransport('/messages', res);
+    const cleanup = () => {
+      transports.delete(transport.sessionId);
+    };
+
     transports.set(transport.sessionId, transport);
-    void server.connect(transport);
+    res.on('close', cleanup);
+
+    void server.connect(transport).catch((error: unknown) => {
+      cleanup();
+      console.error('[mcp-helpers] Failed to connect SSE transport:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to establish SSE session' });
+      }
+    });
   });
 
   app.post('/messages', express.json(), (req, res) => {
