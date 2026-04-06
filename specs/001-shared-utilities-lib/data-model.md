@@ -118,6 +118,18 @@ SpanAttributes   (tracing metadata)
 
 ---
 
+### StaleableResponse\<T\>
+
+> Constitution II.1 compliance type. `ToolResponse<T>` structurally satisfies this interface when `stale: true` and `cachedAt` is set. This type exists to enforce the contract at the type level; consumers typically use `ToolResponse<T>` directly.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | `T` | ✅ | The stale cached payload |
+| `stale` | `boolean` | ✅ | Always `true` for this wrapper |
+| `cachedAt` | `string` | ✅ | ISO 8601 timestamp of when data was cached |
+
+---
+
 ### DealAnalysis
 
 | Field | Type | Required | Description |
@@ -276,13 +288,13 @@ type PriorityLevel = 'critical' | 'high' | 'normal' | 'low' | 'background';
 
 **Priority Constraints**:
 
-| Level | Max Wait | Rate Limit | Starvation Prevention |
-|---|---|---|---|
-| `critical` | 100ms | Bypasses | N/A |
-| `high` | 2s | Enforced | N/A |
-| `normal` | 5s | Enforced | N/A |
-| `low` | 10s | Enforced | ≥1 slot per 60s |
-| `background` | 30s | Enforced | ≥1 slot per 60s |
+| Level | Head-of-Queue Target | Rate Limit | Starvation Prevention | Hard Guarantee? |
+|---|---|---|---|---|
+| `critical` | 100ms | Bypasses | N/A | Yes (FR-016) |
+| `high` | 2s | Enforced | N/A | No (best-effort SLO) |
+| `normal` | 5s | Enforced | N/A | No (best-effort SLO) |
+| `low` | 10s | Enforced | ≥1 slot per 60s | Starvation only |
+| `background` | 30s | Enforced | ≥1 slot per 60s | Starvation only |
 
 ---
 
@@ -307,7 +319,7 @@ type PriorityLevel = 'critical' | 'high' | 'normal' | 'low' | 'background';
 | `clr` | `string` | `color` |
 | `egn` | `string` | `engine` |
 | `tsmn` | `string` | `transmission` |
-| `htsmn` | `string` | `has_keys` (parse) |
+| `htsmn` | `string` | `has_keys` (case-insensitive: `"Yes"` → `true`, else `false`) |
 
 ### IaaiRawListing (partial, key fields)
 

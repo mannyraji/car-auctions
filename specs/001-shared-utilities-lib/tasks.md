@@ -32,7 +32,7 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T005 Implement all shared TypeScript interfaces in `packages/shared/src/types/index.ts`: `AuctionListing`, `CopartRawListing`, `IaaiRawListing`, `DealAnalysis`, `DealSummary`, `RiskFlag`, `VINDecodeResult`, `ProfitEstimate`, `RepairEstimate`, `RepairLineItem`, `CarrierQuote`, `ValueAdjustment`, `BrowserConfig`, `ToolResponse<T>`, `ToolError`, `ErrorCode`, `ServiceRecord`, `RecallRecord`, `NmvtisTitleRecord`, `InsuranceLossRecord`, `JunkSalvageRecord`, `OdometerRecord`, `McpServerOptions`, `BrowserPoolOptions`, `PriorityLevel`, `PriorityRequest`, `SpanAttributes`, `VinCache` interface — per data-model.md and contracts/public-api.md
+- [ ] T005 Implement all shared TypeScript interfaces in `packages/shared/src/types/index.ts`: `AuctionListing`, `CopartRawListing`, `IaaiRawListing`, `DealAnalysis`, `DealSummary`, `RiskFlag`, `VINDecodeResult`, `ProfitEstimate`, `RepairEstimate`, `RepairLineItem`, `CarrierQuote`, `ValueAdjustment`, `BrowserConfig`, `ToolResponse<T>`, `ToolError`, `ErrorCode`, `StaleableResponse<T>` (constitution II.1 compliance — `{ data: T; stale: boolean; cachedAt: string }`), `ServiceRecord`, `RecallRecord`, `NmvtisTitleRecord`, `InsuranceLossRecord`, `JunkSalvageRecord`, `OdometerRecord`, `McpServerOptions`, `BrowserPoolOptions`, `PriorityLevel`, `PriorityRequest`, `SpanAttributes`, `VinCache` interface — per data-model.md and contracts/public-api.md
 - [ ] T006 Implement error classes in `packages/shared/src/errors.ts`: base `AppError` (abstract, with `code`, `retryable`, `retryAfterMs`, `toToolError()` method), `ScraperError`, `CaptchaError`, `RateLimitError`, `CacheError`, `AnalysisError` — per error class contract in contracts/public-api.md
 - [ ] T007 [P] Write error class tests in `packages/shared/tests/errors.test.ts`: verify each class sets correct `code`, `retryable` default, `toToolError()` serialization to `ToolError` shape, and `instanceof` checks
 - [ ] T008 Create barrel export `packages/shared/src/index.ts` re-exporting all types, error classes, and placeholder exports for normalizer, vin-decoder, mcp-helpers, browser-pool, priority-queue, and tracing modules — per contracts/public-api.md barrel definition
@@ -135,7 +135,7 @@
 
 ### Tests for User Story 5
 
-- [ ] T029 [US5] Write priority queue tests in `packages/shared/tests/priority-queue.test.ts`: ordering (critical > high > normal > low > background), FIFO within same level, critical bypass (processed <100ms regardless of queue depth), rate limiting (1 req/3s token bucket enforced for non-critical), starvation prevention (low/background guaranteed ≥1 slot per 60s under sustained high load), `start()`/`stop()` lifecycle, `pending` count accuracy
+- [ ] T029 [US5] Write priority queue tests in `packages/shared/tests/priority-queue.test.ts`: ordering (critical > high > normal > low > background), FIFO within same level, critical bypass (processed <100ms regardless of queue depth), rate limiting (1 req/3s token bucket enforced for non-critical), starvation prevention (low/background guaranteed ≥1 slot per 60s under sustained high load), `start()`/`stop()` lifecycle, `pending` count accuracy, head-of-queue wait target validation (high request at head served within 2s of reaching head, not from enqueue time)
 
 ### Implementation for User Story 5
 
@@ -154,7 +154,7 @@
 
 ### Tests for User Story 6
 
-- [ ] T032 [US6] Write tracing tests in `packages/shared/tests/tracing.test.ts`: `initTracing` with `OTEL_EXPORTER_OTLP_ENDPOINT` set → spans emitted to mock/in-memory exporter; `initTracing` without env var → no-op (no spans emitted, zero overhead); `withSpan` emits span with correct `name`, custom `SpanAttributes` (`tool.name`, `tool.source`, `cache.hit`, `queue.priority`, `queue.wait_ms`), auto-measured `tool.duration_ms`; error in wrapped function → span status set to ERROR; idempotent `initTracing` calls
+- [ ] T032 [US6] Write tracing tests in `packages/shared/tests/tracing.test.ts`: `initTracing` with `OTEL_EXPORTER_OTLP_ENDPOINT` set → spans emitted to mock/in-memory exporter; `initTracing` without env var → no-op (no spans emitted, zero overhead); `withSpan` emits span with correct `name`, custom `SpanAttributes` (`tool.name`, `tool.source`, `cache.hit`, `queue.priority`, `queue.wait_ms`), auto-measured `tool.duration_ms`; error in wrapped function → span status set to ERROR; idempotent `initTracing` calls; `OTEL_EXPORTER_OTLP_ENDPOINT` set to unreachable URL (e.g., `http://localhost:1`) → `initTracing` completes without throwing, `withSpan` executes wrapped function and returns result normally (silent failure, no crash); overhead smoke test: execute a no-op async function 100× with tracing active vs. no-op provider, assert mean traced latency is within 2× of untraced (loose bound safe for CI — SC-006’s strict <5% validated in integration/load tests)
 
 ### Implementation for User Story 6
 
