@@ -19,8 +19,8 @@
 
 **Purpose**: Initialize the `packages/shared` workspace package with TypeScript, dependencies, and project structure
 
-- [ ] T001 Create `packages/shared/package.json` with name `@car-auctions/shared`, ES2022 target, and all runtime dependencies (`@modelcontextprotocol/sdk`, `playwright`, `playwright-extra`, `puppeteer-extra-plugin-stealth`, `better-sqlite3`, `@opentelemetry/sdk-node`, `@opentelemetry/exporter-trace-otlp-http`, `ws`) plus dev dependencies (`vitest`, `typescript`, `@types/better-sqlite3`, `@types/ws`)
-- [ ] T002 Create `packages/shared/tsconfig.json` with `strict: true`, `ES2022` target, `Node16` module resolution, `declaration: true`, `declarationMap: true`, composite project settings
+- [X] T001 Create `packages/shared/package.json` with name `@car-auctions/shared`, ES2022 target, and all runtime dependencies (`@modelcontextprotocol/sdk`, `playwright`, `playwright-extra`, `puppeteer-extra-plugin-stealth`, `better-sqlite3`, `@opentelemetry/sdk-node`, `@opentelemetry/exporter-trace-otlp-http`, `ws`) plus dev dependencies (`vitest`, `typescript`, `@types/better-sqlite3`, `@types/ws`)
+- [X] T002 Create `packages/shared/tsconfig.json` with `strict: true`, `ES2022` target, `Node16` module resolution, `declaration: true`, `declarationMap: true`, composite project settings
 - [ ] T003 [P] Create directory scaffolding per plan.md: `src/types/`, `src/normalizer/`, `src/vin-decoder/`, `src/mcp-helpers/`, `src/browser-pool/`, `src/priority-queue/`, `src/tracing/`, `tests/fixtures/`, `data/` and add `data/` to `.gitignore`
 - [ ] T004 [P] Configure Vitest in `packages/shared/vitest.config.ts` with TypeScript support and coverage thresholds (80% branch coverage)
 
