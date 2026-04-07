@@ -55,7 +55,7 @@ jobs:
         run: npm run build --workspaces --if-present
       - name: Run tests
         if: steps.project-files.outputs.has_npm_lockfile == 'true'
-        run: npm run test --workspaces --if-present -- --coverage
+        run: npm run test --workspaces --if-present
       - name: Lint
         if: steps.project-files.outputs.has_npm_lockfile == 'true' && steps.project-files.outputs.has_eslint_config == 'true'
         run: npx eslint .
