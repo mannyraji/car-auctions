@@ -52,7 +52,7 @@ describe('createMcpServer', () => {
 
   it('throws on invalid transport value', async () => {
     await expect(
-      createMcpServer({ name: 'test', version: '0.1.0', transport: 'invalid' as 'stdio' }),
+      createMcpServer({ name: 'test', version: '0.1.0', transport: 'invalid' as 'stdio' })
     ).rejects.toThrow(/Invalid transport/);
   });
 

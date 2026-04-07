@@ -84,14 +84,25 @@ export class PriorityQueue {
       // Critical: bypass queue — execute immediately
       if (full.priority === 'critical') {
         this.activeCount++;
-        full.execute()
-          .then((v) => { this.activeCount--; resolve(v as T); })
-          .catch((e) => { this.activeCount--; reject(e); });
+        full
+          .execute()
+          .then((v) => {
+            this.activeCount--;
+            resolve(v as T);
+          })
+          .catch((e) => {
+            this.activeCount--;
+            reject(e);
+          });
         return;
       }
 
       const queue = this.queues.get(full.priority)!;
-      queue.push({ request: full as unknown as PriorityRequest<unknown>, resolve: resolve as (v: unknown) => void, reject });
+      queue.push({
+        request: full as unknown as PriorityRequest<unknown>,
+        resolve: resolve as (v: unknown) => void,
+        reject,
+      });
       this.scheduleNext();
     });
   }
@@ -198,7 +209,13 @@ export class PriorityQueue {
   // ─── Private ─────────────────────────────────────────────────────────────────
 
   private scheduleNext(): void {
-    if ((this.processingTimer !== null || this.isMicrotaskScheduled) || this.isShutdown || this.isPaused) return;
+    if (
+      this.processingTimer !== null ||
+      this.isMicrotaskScheduled ||
+      this.isShutdown ||
+      this.isPaused
+    )
+      return;
 
     const entry = this.peekNext();
     if (!entry) return;
@@ -258,7 +275,8 @@ export class PriorityQueue {
   }
 
   private peekNext(): QueueEntry<unknown> | null {
-    for (const level of PRIORITY_ORDER.slice(1)) { // skip 'critical' — handled inline
+    for (const level of PRIORITY_ORDER.slice(1)) {
+      // skip 'critical' — handled inline
       const queue = this.queues.get(level)!;
       if (queue.length > 0) return queue[0];
     }
@@ -266,7 +284,8 @@ export class PriorityQueue {
   }
 
   private dequeueNext(): QueueEntry<unknown> | null {
-    for (const level of PRIORITY_ORDER.slice(1)) { // skip 'critical'
+    for (const level of PRIORITY_ORDER.slice(1)) {
+      // skip 'critical'
       const queue = this.queues.get(level)!;
       if (queue.length > 0) return queue.shift()!;
     }
@@ -291,8 +310,14 @@ export class PriorityQueue {
         this.activeCount++;
         entry.request
           .execute()
-          .then((v) => { this.activeCount--; entry.resolve(v); })
-          .catch((e) => { this.activeCount--; entry.reject(e); });
+          .then((v) => {
+            this.activeCount--;
+            entry.resolve(v);
+          })
+          .catch((e) => {
+            this.activeCount--;
+            entry.reject(e);
+          });
         return; // one slot per interval
       }
     }

@@ -15,7 +15,12 @@ const { mockContext, mockBrowser, mockChromiumExtra, mockStealthPlugin } = vi.ho
     use: vi.fn(),
     launch: vi.fn().mockResolvedValue(browser),
   };
-  return { mockContext: ctx, mockBrowser: browser, mockChromiumExtra: chromiumExtra, mockStealthPlugin: stealthPlugin };
+  return {
+    mockContext: ctx,
+    mockBrowser: browser,
+    mockChromiumExtra: chromiumExtra,
+    mockStealthPlugin: stealthPlugin,
+  };
 });
 
 vi.mock('playwright', () => ({
@@ -43,7 +48,9 @@ describe('BrowserPool', () => {
     mockBrowser.close.mockResolvedValue(undefined);
     mockContext.close.mockResolvedValue(undefined);
     mockChromiumExtra.launch.mockResolvedValue(mockBrowser);
-    vi.mocked(playwrightChromium.launch).mockResolvedValue(mockBrowser as unknown as import('playwright').Browser);
+    vi.mocked(playwrightChromium.launch).mockResolvedValue(
+      mockBrowser as unknown as import('playwright').Browser
+    );
   });
 
   afterEach(() => {
@@ -136,7 +143,10 @@ describe('BrowserPool', () => {
   });
 
   it('forwards proxyUrl to browser launch options', async () => {
-    const pool = new BrowserPool({ proxyUrl: 'http://proxy.example.com:8080', stealthEnabled: false });
+    const pool = new BrowserPool({
+      proxyUrl: 'http://proxy.example.com:8080',
+      stealthEnabled: false,
+    });
     const ctx = await pool.acquire();
     await ctx.release();
     await pool.shutdown();
@@ -144,7 +154,7 @@ describe('BrowserPool', () => {
     expect(vi.mocked(playwrightChromium.launch)).toHaveBeenCalledWith(
       expect.objectContaining({
         proxy: { server: 'http://proxy.example.com:8080' },
-      }),
+      })
     );
   });
 
@@ -176,7 +186,10 @@ describe('BrowserPool', () => {
 
     const ctx1 = await pool.acquireContext();
     let resolved = false;
-    const ctx2Promise = pool.acquireContext().then((ctx) => { resolved = true; return ctx; });
+    const ctx2Promise = pool.acquireContext().then((ctx) => {
+      resolved = true;
+      return ctx;
+    });
 
     await new Promise((r) => setTimeout(r, 10));
     expect(resolved).toBe(false);

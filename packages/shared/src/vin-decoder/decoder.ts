@@ -27,15 +27,11 @@ interface NhtsaResponse {
  */
 export async function decodeVin(
   vin: string,
-  options?: { cache?: VinCache },
+  options?: { cache?: VinCache }
 ): Promise<VINDecodeResult> {
   const validation = validateVin(vin);
   if (!validation.valid) {
-    throw new ScraperError(
-      `Invalid VIN: ${validation.error}`,
-      'SCRAPER_ERROR',
-      false,
-    );
+    throw new ScraperError(`Invalid VIN: ${validation.error}`, 'SCRAPER_ERROR', false);
   }
 
   const cache = options?.cache;
@@ -49,7 +45,7 @@ export async function decodeVin(
         throw new ScraperError(
           cached.errorCode.slice(NEGATIVE_CACHE_PREFIX.length),
           'SCRAPER_ERROR',
-          false,
+          false
         );
       }
       return cached;

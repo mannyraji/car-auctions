@@ -45,7 +45,8 @@ export class BrowserPool {
       headless: options?.headless ?? true,
       maxContexts: options?.maxContexts ?? 3,
       stealthEnabled: options?.stealthEnabled ?? true,
-      proxyUrl: options?.proxyUrl !== undefined ? options.proxyUrl : (process.env['PROXY_URL'] ?? null),
+      proxyUrl:
+        options?.proxyUrl !== undefined ? options.proxyUrl : (process.env['PROXY_URL'] ?? null),
       userAgent: options?.userAgent ?? null,
     };
   }
@@ -127,16 +128,16 @@ export class BrowserPool {
 
     if (this.options.stealthEnabled) {
       // Use dynamic import so Vitest can mock these modules in tests
-      const playwrightExtra = await import('playwright-extra') as {
+      const playwrightExtra = (await import('playwright-extra')) as {
         chromium: import('playwright').BrowserType & {
           use: (plugin: unknown) => void;
         };
       };
-      const stealthModule = await import('puppeteer-extra-plugin-stealth') as {
+      const stealthModule = (await import('puppeteer-extra-plugin-stealth')) as {
         default?: () => unknown;
         [key: string]: unknown;
       };
-      const StealthPlugin = stealthModule.default as (() => unknown);
+      const StealthPlugin = stealthModule.default as () => unknown;
       const stealth = StealthPlugin();
 
       playwrightExtra.chromium.use(stealth);
@@ -169,6 +170,7 @@ export class BrowserPool {
     this.active.add(playwrightCtx);
 
     const createdAt = Date.now();
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const pool = this;
 
     const makeRelease = (ctx: import('playwright').BrowserContext): BrowserContext['release'] =>

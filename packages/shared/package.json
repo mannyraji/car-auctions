@@ -20,7 +20,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.0",

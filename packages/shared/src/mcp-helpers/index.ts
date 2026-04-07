@@ -23,7 +23,9 @@ interface McpServerInstance {
 }
 
 /** Resolve the WebSocketServer constructor from the `ws` module, handling both CJS export shapes. */
-function getWebSocketServerConstructor(ws: typeof import('ws')): typeof import('ws').WebSocketServer {
+function getWebSocketServerConstructor(
+  ws: typeof import('ws')
+): typeof import('ws').WebSocketServer {
   const wsModule = ws as unknown as Record<string, unknown>;
   return (wsModule['WebSocketServer'] ?? wsModule['Server']) as typeof import('ws').WebSocketServer;
 }
@@ -36,11 +38,10 @@ function getWebSocketServerConstructor(ws: typeof import('ws')): typeof import('
  * server.tool('search', { q: z.string() }, async ({ q }) => ({ content: [...] }));
  */
 export async function createMcpServer(options: McpServerOptions): Promise<McpServerInstance> {
-  const transportMode =
-    options.transport ?? (process.env['TRANSPORT'] || 'stdio');
+  const transportMode = options.transport ?? (process.env['TRANSPORT'] || 'stdio');
 
   // Use dynamic import so Vitest can mock these modules in tests
-  const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js') as unknown as {
+  const { McpServer } = (await import('@modelcontextprotocol/sdk/server/mcp.js')) as unknown as {
     McpServer: new (info: { name: string; version: string }) => McpServerInstance;
   };
 
@@ -48,9 +49,10 @@ export async function createMcpServer(options: McpServerOptions): Promise<McpSer
 
   switch (transportMode) {
     case 'stdio': {
-      const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js') as unknown as {
-        StdioServerTransport: new () => TransportInstance;
-      };
+      const { StdioServerTransport } =
+        (await import('@modelcontextprotocol/sdk/server/stdio.js')) as unknown as {
+          StdioServerTransport: new () => TransportInstance;
+        };
       const transport = new StdioServerTransport();
       await server.connect(transport);
       return server;
@@ -58,9 +60,10 @@ export async function createMcpServer(options: McpServerOptions): Promise<McpSer
 
     case 'sse': {
       const port = options.port ?? parseInt(process.env['PORT'] ?? '3000', 10);
-      const { SSEServerTransport } = await import('@modelcontextprotocol/sdk/server/sse.js') as unknown as {
-        SSEServerTransport: new (path: string, res: http.ServerResponse) => TransportInstance;
-      };
+      const { SSEServerTransport } =
+        (await import('@modelcontextprotocol/sdk/server/sse.js')) as unknown as {
+          SSEServerTransport: new (path: string, res: http.ServerResponse) => TransportInstance;
+        };
       await new Promise<void>((resolve, reject) => {
         const httpServer = http.createServer((req, res) => {
           if (req.url === '/sse' && req.method === 'GET') {
@@ -97,7 +100,7 @@ export async function createMcpServer(options: McpServerOptions): Promise<McpSer
 
     default:
       throw new Error(
-        `Invalid transport "${transportMode}". Must be one of: stdio, sse, websocket`,
+        `Invalid transport "${transportMode}". Must be one of: stdio, sse, websocket`
       );
   }
 }

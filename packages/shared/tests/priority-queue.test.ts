@@ -28,13 +28,17 @@ describe('PriorityQueue', () => {
     // Enqueue normal first (would normally block)
     const normalP = queue.enqueue({
       priority: 'normal',
-      execute: async () => { order.push('normal'); },
+      execute: async () => {
+        order.push('normal');
+      },
     });
 
     // Enqueue critical — should bypass
     const critP = queue.enqueue({
       priority: 'critical',
-      execute: async () => { order.push('critical'); },
+      execute: async () => {
+        order.push('critical');
+      },
     });
 
     await critP;
@@ -51,7 +55,12 @@ describe('PriorityQueue', () => {
     const queue = new PriorityQueue({ rateLimit: { requestsPerSecond: 1000 } });
 
     const promises = (['background', 'low', 'normal', 'high'] as PriorityLevel[]).map((p) =>
-      queue.enqueue({ priority: p, execute: async () => { order.push(p); } }),
+      queue.enqueue({
+        priority: p,
+        execute: async () => {
+          order.push(p);
+        },
+      })
     );
 
     await vi.advanceTimersByTimeAsync(100);
@@ -75,7 +84,12 @@ describe('PriorityQueue', () => {
     const queue = new PriorityQueue({ rateLimit: { requestsPerSecond: 1000 } });
 
     const promises = ['first', 'second', 'third'].map((id) =>
-      queue.enqueue({ priority: 'normal', execute: async () => { order.push(id); } }),
+      queue.enqueue({
+        priority: 'normal',
+        execute: async () => {
+          order.push(id);
+        },
+      })
     );
 
     await vi.advanceTimersByTimeAsync(100);
@@ -89,7 +103,10 @@ describe('PriorityQueue', () => {
     const queue = new PriorityQueue({ rateLimit: { requestsPerSecond: 0.01 } });
 
     // Enqueue a slow first request to block the queue
-    const p1 = queue.enqueue({ priority: 'normal', execute: () => new Promise((r) => setTimeout(r, 5000)) });
+    const p1 = queue.enqueue({
+      priority: 'normal',
+      execute: () => new Promise((r) => setTimeout(r, 5000)),
+    });
     const p2 = queue.enqueue({ priority: 'normal', execute: async () => {} });
     const p3 = queue.enqueue({ priority: 'normal', execute: async () => {} });
 
@@ -109,7 +126,10 @@ describe('PriorityQueue', () => {
     const queue = new PriorityQueue({ rateLimit: { requestsPerSecond: 0.001 } });
 
     // The first enqueue gets processed immediately (1 token), rest queue up
-    const p1 = queue.enqueue({ priority: 'high', execute: () => new Promise((r) => setTimeout(r, 10_000)) });
+    const p1 = queue.enqueue({
+      priority: 'high',
+      execute: () => new Promise((r) => setTimeout(r, 10_000)),
+    });
     const p2 = queue.enqueue({ priority: 'high', execute: async () => {} });
     const p3 = queue.enqueue({ priority: 'low', execute: async () => {} });
 
@@ -134,7 +154,10 @@ describe('PriorityQueue', () => {
     const queue = new PriorityQueue({ rateLimit: { requestsPerSecond: 0.001 } });
 
     // Block queue with first slow item
-    queue.enqueue({ priority: 'normal', execute: () => new Promise((r) => setTimeout(r, 100_000)) });
+    queue.enqueue({
+      priority: 'normal',
+      execute: () => new Promise((r) => setTimeout(r, 100_000)),
+    });
 
     // Queue up second item
     const p = queue.enqueue({ priority: 'normal', execute: async () => 'result' });
@@ -153,8 +176,10 @@ describe('PriorityQueue', () => {
     const promises = [1, 2, 3].map(() =>
       queue.enqueue({
         priority: 'normal',
-        execute: async () => { timestamps.push(Date.now()); },
-      }),
+        execute: async () => {
+          timestamps.push(Date.now());
+        },
+      })
     );
 
     // Advance enough time for all to run
@@ -179,15 +204,19 @@ describe('PriorityQueue', () => {
     const highPromises = [];
     for (let i = 0; i < 5; i++) {
       highPromises.push(
-        queue.enqueue({
-          priority: 'high',
-          execute: () => new Promise((r) => setTimeout(r, 100_000)),
-        }).catch(() => {}),
+        queue
+          .enqueue({
+            priority: 'high',
+            execute: () => new Promise((r) => setTimeout(r, 100_000)),
+          })
+          .catch(() => {})
       );
     }
     const bgPromise = queue.enqueue({
       priority: 'background',
-      execute: async () => { executed.push('background'); },
+      execute: async () => {
+        executed.push('background');
+      },
     });
     bgPromise.catch(() => {});
 
@@ -203,9 +232,9 @@ describe('PriorityQueue', () => {
     const queue = new PriorityQueue();
     await queue.shutdown();
 
-    await expect(
-      queue.enqueue({ priority: 'normal', execute: async () => 1 }),
-    ).rejects.toThrow(/shut down/);
+    await expect(queue.enqueue({ priority: 'normal', execute: async () => 1 })).rejects.toThrow(
+      /shut down/
+    );
   });
 
   it('processing is true while a request is executing', async () => {
@@ -213,10 +242,16 @@ describe('PriorityQueue', () => {
 
     let resolveRequest!: () => void;
     const requestStarted = new Promise<void>((res) => {
-      queue.enqueue({
-        priority: 'normal',
-        execute: () => new Promise<void>((r) => { resolveRequest = r; res(); }),
-      }).catch(() => {});
+      queue
+        .enqueue({
+          priority: 'normal',
+          execute: () =>
+            new Promise<void>((r) => {
+              resolveRequest = r;
+              res();
+            }),
+        })
+        .catch(() => {});
     });
 
     await vi.advanceTimersByTimeAsync(10);
@@ -235,7 +270,9 @@ describe('PriorityQueue', () => {
     const queue = new PriorityQueue({ rateLimit: { requestsPerSecond: 0.001 } });
 
     // Consume the initial token with a slow blocking item, then flush the microtask
-    queue.enqueue({ priority: 'normal', execute: () => new Promise((r) => setTimeout(r, 100_000)) }).catch(() => {});
+    queue
+      .enqueue({ priority: 'normal', execute: () => new Promise((r) => setTimeout(r, 100_000)) })
+      .catch(() => {});
     await vi.advanceTimersByTimeAsync(0); // flush microtask so token is consumed
 
     // Now enqueue additional items — they must queue since no tokens remain
@@ -267,9 +304,9 @@ describe('PriorityQueue', () => {
 
     queue.stop();
 
-    await expect(
-      queue.enqueue({ priority: 'normal', execute: async () => 1 }),
-    ).rejects.toThrow(/stopped/);
+    await expect(queue.enqueue({ priority: 'normal', execute: async () => 1 })).rejects.toThrow(
+      /stopped/
+    );
 
     await queue.shutdown();
   });

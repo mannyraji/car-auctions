@@ -1,0 +1,11 @@
+dist/
+node_modules/
+data/
+*.lock
+package-lock.json
+# Documentation and spec files — not subject to formatting enforcement
+**/*.md
+docs/
+specs/
+# Git submodule — must not be touched
+.github/copilot-shared/

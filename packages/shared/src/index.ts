@@ -46,13 +46,7 @@ export type {
 } from './types/index.js';
 
 // ─── Error Classes ────────────────────────────────────────────────────────────
-export {
-  ScraperError,
-  CaptchaError,
-  RateLimitError,
-  CacheError,
-  AnalysisError,
-} from './errors.js';
+export { ScraperError, CaptchaError, RateLimitError, CacheError, AnalysisError } from './errors.js';
 
 // ─── Auction Normalizer ───────────────────────────────────────────────────────
 export { normalizeCopart, normalizeIaai } from './normalizer/index.js';
@@ -71,10 +65,7 @@ export { createMcpServer } from './mcp-helpers/index.js';
 export type { McpServerOptions } from './types/index.js';
 
 // ─── Browser Pool ─────────────────────────────────────────────────────────────
-export {
-  BrowserPool,
-  type BrowserContext,
-} from './browser-pool/index.js';
+export { BrowserPool, type BrowserContext } from './browser-pool/index.js';
 export type { BrowserPoolOptions } from './types/index.js';
 
 // ─── Priority Queue ───────────────────────────────────────────────────────────
@@ -82,8 +73,4 @@ export { PriorityQueue } from './priority-queue/index.js';
 export type { PriorityLevel, PriorityRequest, PriorityQueueOptions } from './types/index.js';
 
 // ─── OpenTelemetry Tracing ────────────────────────────────────────────────────
-export {
-  initTracing,
-  withSpan,
-  type SpanAttributes,
-} from './tracing/index.js';
+export { initTracing, withSpan, type SpanAttributes } from './tracing/index.js';

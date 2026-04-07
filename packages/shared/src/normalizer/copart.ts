@@ -18,9 +18,7 @@ export function normalizeCopart(raw: CopartRawListing): AuctionListing {
   const imageUrls = extractCopartImages(raw.tims);
 
   // has_keys: "Yes" (case-insensitive) → true, anything else → false
-  const hasKeys = typeof raw.htsmn === 'string'
-    ? raw.htsmn.toLowerCase() === 'yes'
-    : false;
+  const hasKeys = typeof raw.htsmn === 'string' ? raw.htsmn.toLowerCase() === 'yes' : false;
 
   return {
     source: 'copart',
@@ -43,9 +41,8 @@ export function normalizeCopart(raw: CopartRawListing): AuctionListing {
     drive_type: raw.driveType != null ? String(raw.driveType) : null,
     fuel_type: null,
     cylinders: null,
-    current_bid: raw.dynamicLotDetails?.currentBid != null
-      ? Number(raw.dynamicLotDetails.currentBid)
-      : null,
+    current_bid:
+      raw.dynamicLotDetails?.currentBid != null ? Number(raw.dynamicLotDetails.currentBid) : null,
     buy_now_price: raw.bn != null ? Number(raw.bn) : null,
     sale_date: raw.sd != null ? String(raw.sd) : null,
     sale_status: String(raw.ss ?? 'UPCOMING'),
@@ -53,7 +50,7 @@ export function normalizeCopart(raw: CopartRawListing): AuctionListing {
     location: String(raw.ld ?? ''),
     latitude: raw.lat != null ? Number(raw.lat) : null,
     longitude: raw.lng != null ? Number(raw.lng) : null,
-    image_url: imageUrls.length > 0 ? imageUrls[0] : (raw.imgUrl != null ? String(raw.imgUrl) : null),
+    image_url: imageUrls.length > 0 ? imageUrls[0] : raw.imgUrl != null ? String(raw.imgUrl) : null,
     image_urls: imageUrls,
     detail_url: String(raw.du ?? ''),
     seller: raw.slr != null ? String(raw.slr) : null,

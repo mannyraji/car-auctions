@@ -43,7 +43,9 @@ export class SqliteVinCache implements VinCache {
   constructor(dbPath?: string) {
     const resolvedPath = dbPath ?? resolveDefaultPath();
     const Database = loadSqlite();
-    this.db = new (Database as unknown as new (path: string) => import('better-sqlite3').Database)(resolvedPath);
+    this.db = new (Database as unknown as new (path: string) => import('better-sqlite3').Database)(
+      resolvedPath
+    );
 
     // WAL mode for concurrent reads
     this.db.pragma('journal_mode = WAL');
@@ -59,10 +61,10 @@ export class SqliteVinCache implements VinCache {
     `);
 
     this.stmtGet = this.db.prepare(
-      'SELECT vin, result_json, expires_at FROM vin_cache WHERE vin = ?',
+      'SELECT vin, result_json, expires_at FROM vin_cache WHERE vin = ?'
     );
     this.stmtSet = this.db.prepare(
-      'INSERT OR REPLACE INTO vin_cache (vin, result_json, expires_at) VALUES (?, ?, ?)',
+      'INSERT OR REPLACE INTO vin_cache (vin, result_json, expires_at) VALUES (?, ?, ?)'
     );
     this.stmtDelete = this.db.prepare('DELETE FROM vin_cache WHERE vin = ?');
   }
