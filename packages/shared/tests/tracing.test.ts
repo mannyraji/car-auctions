@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  initTracing,
-  withSpan,
-  _resetTracingState,
-} from '../src/tracing/index.js';
+import { initTracing, withSpan, _resetTracingState } from '../src/tracing/index.js';
 
 describe('initTracing', () => {
   beforeEach(() => {
@@ -61,7 +57,7 @@ describe('withSpan', () => {
         'queue.priority': 'high',
         'queue.wait_ms': 100,
       },
-      async () => 'done',
+      async () => 'done'
     );
     expect(result).toBe('done');
   });
@@ -70,7 +66,7 @@ describe('withSpan', () => {
     await expect(
       withSpan('failing.op', {}, async () => {
         throw new Error('operation failed');
-      }),
+      })
     ).rejects.toThrow('operation failed');
   });
 
@@ -100,9 +96,7 @@ describe('withSpan', () => {
 
   it('overhead smoke test: 100x no-op withSpan completes in reasonable time', async () => {
     const start = Date.now();
-    const ops = Array.from({ length: 100 }, (_, i) =>
-      withSpan(`op.${i}`, {}, async () => i),
-    );
+    const ops = Array.from({ length: 100 }, (_, i) => withSpan(`op.${i}`, {}, async () => i));
     const results = await Promise.all(ops);
     const elapsed = Date.now() - start;
 

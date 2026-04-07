@@ -23,11 +23,6 @@ interface OtelTracer {
   startActiveSpan<T>(name: string, fn: (span: OtelSpan) => T): T;
 }
 
-interface OtelTracerProvider {
-  getTracer(name: string): OtelTracer;
-  register(): void;
-}
-
 /**
  * Initialize OpenTelemetry tracing.
  *
@@ -60,18 +55,12 @@ export function initTracing(options: { serviceName: string }): void {
 
 function initRealTracing(serviceName: string, endpoint: string): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { NodeSDK } = require('@opentelemetry/sdk-node') as {
-      NodeSDK: new (opts: {
-        serviceName: string;
-        traceExporter: unknown;
-      }) => { start(): void };
+      NodeSDK: new (opts: { serviceName: string; traceExporter: unknown }) => { start(): void };
     };
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http') as {
       OTLPTraceExporter: new (opts: { url: string }) => unknown;
     };
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const api = require('@opentelemetry/api') as {
       trace: { getTracer(name: string): OtelTracer };
     };
@@ -115,7 +104,7 @@ const noOpSpan: OtelSpan = {
 export async function withSpan<T>(
   name: string,
   attrs: SpanAttributes,
-  fn: () => Promise<T>,
+  fn: () => Promise<T>
 ): Promise<T> {
   // Ensure tracer is initialized (no-op if not explicitly initialized)
   if (!tracerInitialized) {

@@ -27,9 +27,7 @@ export function normalizeIaai(raw: IaaiRawListing): AuctionListing {
   const titleCode = raw.titleCode != null ? String(raw.titleCode) : null;
   const titleType = resolveTitleType(titleCode);
 
-  const hasKeys = typeof raw.hasKeys === 'string'
-    ? raw.hasKeys.toUpperCase() === 'YES'
-    : false;
+  const hasKeys = typeof raw.hasKeys === 'string' ? raw.hasKeys.toUpperCase() === 'YES' : false;
 
   const odometer = parseOdometer(raw.odometer);
   const cylinders = raw.cylinders != null ? parseIntOrNull(String(raw.cylinders)) : null;

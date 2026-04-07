@@ -51,7 +51,7 @@ export class ScraperError extends AppError {
     message: string,
     code: 'SCRAPER_ERROR' | 'TIMEOUT' = 'SCRAPER_ERROR',
     retryable = false,
-    retryAfterMs?: number,
+    retryAfterMs?: number
   ) {
     super(message, retryAfterMs);
     this.code = code;

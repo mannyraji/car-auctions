@@ -166,7 +166,10 @@ describe('InMemoryVinCache', () => {
 
   it('stores and retrieves a VIN result', async () => {
     const cache = new InMemoryVinCache();
-    const result = { vin: VALID_VIN, year: 2003 } as import('../src/types/index.js').VINDecodeResult;
+    const result = {
+      vin: VALID_VIN,
+      year: 2003,
+    } as import('../src/types/index.js').VINDecodeResult;
     await cache.set(VALID_VIN, result, 60_000);
     expect(await cache.get(VALID_VIN)).toEqual(result);
   });
@@ -174,7 +177,10 @@ describe('InMemoryVinCache', () => {
   it('returns null after TTL expires', async () => {
     vi.useFakeTimers();
     const cache = new InMemoryVinCache();
-    const result = { vin: VALID_VIN, year: 2003 } as import('../src/types/index.js').VINDecodeResult;
+    const result = {
+      vin: VALID_VIN,
+      year: 2003,
+    } as import('../src/types/index.js').VINDecodeResult;
     await cache.set(VALID_VIN, result, 1000);
     vi.advanceTimersByTime(2000);
     expect(await cache.get(VALID_VIN)).toBeNull();

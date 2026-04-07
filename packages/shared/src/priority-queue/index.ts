@@ -38,6 +38,7 @@ export class PriorityQueue {
   private isMicrotaskScheduled = false;
   private starvationTimer: ReturnType<typeof setInterval> | null = null;
   private isShutdown = false;
+  private isPaused = false;
   private activeCount = 0;
 
   constructor(options?: PriorityQueueOptions) {
@@ -64,6 +65,9 @@ export class PriorityQueue {
   /**
    * Enqueue a request. Returns a promise that resolves with the result.
    * `id` and `enqueuedAt` are auto-assigned.
+   *
+   * `critical` requests bypass the queue, rate limit, **and** pause state — they
+   * execute immediately even while the queue is stopped.
    */
   enqueue<T>(request: Omit<PriorityRequest<T>, 'id' | 'enqueuedAt'>): Promise<T> {
     if (this.isShutdown) {
@@ -77,19 +81,92 @@ export class PriorityQueue {
         enqueuedAt: Date.now(),
       };
 
-      // Critical: bypass queue — execute immediately
+      // Critical: bypass queue, rate limit, AND pause state — execute immediately
       if (full.priority === 'critical') {
         this.activeCount++;
-        full.execute()
-          .then((v) => { this.activeCount--; resolve(v as T); })
-          .catch((e) => { this.activeCount--; reject(e); });
+        full
+          .execute()
+          .then((v) => {
+            this.activeCount--;
+            resolve(v as T);
+          })
+          .catch((e) => {
+            this.activeCount--;
+            reject(e);
+          });
+        return;
+      }
+
+      // Non-critical requests are blocked while paused
+      if (this.isPaused) {
+        reject(new Error('PriorityQueue has been stopped'));
         return;
       }
 
       const queue = this.queues.get(full.priority)!;
-      queue.push({ request: full as unknown as PriorityRequest<unknown>, resolve: resolve as (v: unknown) => void, reject });
+      queue.push({
+        request: full as unknown as PriorityRequest<unknown>,
+        resolve: resolve as (v: unknown) => void,
+        reject,
+      });
       this.scheduleNext();
     });
+  }
+
+  /**
+   * Resume the queue processing loop.
+   * The queue starts automatically on construction. After a `stop()` call,
+   * `start()` re-enables processing for newly enqueued requests.
+   * No-op if already running or if permanently shut down via `shutdown()`.
+   */
+  start(): void {
+    if (this.isShutdown) return;
+    this.isPaused = false;
+    if (!this.starvationTimer) {
+      this.starvationTimer = setInterval(() => this.runStarvationSlot(), 60_000);
+    }
+    this.scheduleNext();
+  }
+
+  /**
+   * Pause processing and cancel all currently queued requests.
+   *
+   * **Note:** pending (not yet executing) non-critical requests are immediately
+   * rejected with a `PriorityQueue has been stopped` error and are **not**
+   * executed. Already-running requests complete normally. `critical` requests
+   * bypass the paused state and execute immediately regardless. Call `start()`
+   * to resume processing new requests.
+   *
+   * @example
+   * queue.stop();
+   * // ... later
+   * queue.start();
+   */
+  stop(): void {
+    this.isPaused = true;
+    if (this.processingTimer) {
+      clearTimeout(this.processingTimer);
+      this.processingTimer = null;
+    }
+    if (this.starvationTimer) {
+      clearInterval(this.starvationTimer);
+      this.starvationTimer = null;
+    }
+    // Reject all pending entries
+    for (const queue of this.queues.values()) {
+      for (const entry of queue) {
+        entry.reject(new Error('PriorityQueue has been stopped'));
+      }
+      queue.length = 0;
+    }
+  }
+
+  /**
+   * Whether the queue is currently executing a request.
+   * Note: critical-bypass requests increment `activeCount` immediately.
+   */
+  get processing(): boolean {
+    return this.activeCount > 0;
   }
 
   /**
@@ -108,7 +185,7 @@ export class PriorityQueue {
     // Reject all pending entries
     for (const queue of this.queues.values()) {
       for (const entry of queue) {
-        entry.reject(new Error('PriorityQueue shut down'));
+        entry.reject(new Error('PriorityQueue has been shut down'));
       }
       queue.length = 0;
     }
@@ -139,7 +216,13 @@ export class PriorityQueue {
   // ─── Private ─────────────────────────────────────────────────────────────────
 
   private scheduleNext(): void {
-    if ((this.processingTimer !== null || this.isMicrotaskScheduled) || this.isShutdown) return;
+    if (
+      this.processingTimer !== null ||
+      this.isMicrotaskScheduled ||
+      this.isShutdown ||
+      this.isPaused
+    )
+      return;
 
     const entry = this.peekNext();
     if (!entry) return;
@@ -165,7 +248,7 @@ export class PriorityQueue {
   }
 
   private processNext(): void {
-    if (this.isShutdown) return;
+    if (this.isShutdown || this.isPaused) return;
 
     this.refillTokens();
     if (this.tokens < 1) {
@@ -199,7 +282,8 @@ export class PriorityQueue {
   }
 
   private peekNext(): QueueEntry<unknown> | null {
-    for (const level of PRIORITY_ORDER.slice(1)) { // skip 'critical' — handled inline
+    for (const level of PRIORITY_ORDER.slice(1)) {
+      // skip 'critical' — handled inline
       const queue = this.queues.get(level)!;
       if (queue.length > 0) return queue[0];
     }
@@ -207,7 +291,8 @@ export class PriorityQueue {
   }
 
   private dequeueNext(): QueueEntry<unknown> | null {
-    for (const level of PRIORITY_ORDER.slice(1)) { // skip 'critical'
+    for (const level of PRIORITY_ORDER.slice(1)) {
+      // skip 'critical'
       const queue = this.queues.get(level)!;
       if (queue.length > 0) return queue.shift()!;
     }
@@ -223,7 +308,7 @@ export class PriorityQueue {
 
   /** Starvation prevention: force ≥1 low/background task per 60s */
   private runStarvationSlot(): void {
-    if (this.isShutdown) return;
+    if (this.isShutdown || this.isPaused) return;
 
     for (const level of ['low', 'background'] as PriorityLevel[]) {
       const queue = this.queues.get(level)!;
@@ -232,8 +317,14 @@ export class PriorityQueue {
         this.activeCount++;
         entry.request
           .execute()
-          .then((v) => { this.activeCount--; entry.resolve(v); })
-          .catch((e) => { this.activeCount--; entry.reject(e); });
+          .then((v) => {
+            this.activeCount--;
+            entry.resolve(v);
+          })
+          .catch((e) => {
+            this.activeCount--;
+            entry.reject(e);
+          });
         return; // one slot per interval
       }
     }

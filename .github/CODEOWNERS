@@ -1,0 +1,8 @@
+# Repository owners
+* @mannyraji
+
+# Shared utilities library — all changes require review
+packages/shared/ @mannyraji
+
+# GitHub workflows — all changes require review
+.github/ @mannyraji

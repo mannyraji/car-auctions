@@ -26,10 +26,7 @@
   "latitude": 29.9902,
   "longitude": -95.3368,
   "imageUrls": {
-    "large": [
-      "https://vg.iaai.com/12345678_1_lrg.jpg",
-      "https://vg.iaai.com/12345678_2_lrg.jpg"
-    ]
+    "large": ["https://vg.iaai.com/12345678_1_lrg.jpg", "https://vg.iaai.com/12345678_2_lrg.jpg"]
   },
   "detailUrl": "https://www.iaai.com/VehicleDetail/A12345678",
   "seller": "Allstate Insurance"

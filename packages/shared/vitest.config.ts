@@ -32,7 +32,14 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/index.ts'],
+      // Exclude barrel/re-export files — they are 100% type-only or trivial pass-throughs
+      // that add noise to coverage metrics without meaningful branch logic
+      exclude: [
+        'src/index.ts',
+        'src/normalizer/index.ts',
+        'src/vin-decoder/index.ts',
+        'src/types/index.ts',
+      ],
       thresholds: {
         branches: 80,
         functions: 80,
