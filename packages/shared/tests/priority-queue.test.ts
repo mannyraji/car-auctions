@@ -207,4 +207,60 @@ describe('PriorityQueue', () => {
       queue.enqueue({ priority: 'normal', execute: async () => 1 }),
     ).rejects.toThrow(/shut down/);
   });
+
+  it('processing is true while a request is executing', async () => {
+    const queue = new PriorityQueue({ rateLimit: { requestsPerSecond: 100 } });
+
+    let resolveRequest!: () => void;
+    const requestStarted = new Promise<void>((res) => {
+      queue.enqueue({
+        priority: 'normal',
+        execute: () => new Promise<void>((r) => { resolveRequest = r; res(); }),
+      }).catch(() => {});
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    await requestStarted;
+    expect(queue.processing).toBe(true);
+
+    resolveRequest();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(queue.processing).toBe(false);
+
+    await queue.shutdown();
+  });
+
+  it('stop() rejects all queued requests', async () => {
+    // Use an extremely slow rate so queued items never get tokens before stop() runs
+    const queue = new PriorityQueue({ rateLimit: { requestsPerSecond: 0.001 } });
+
+    // Consume the initial token with a slow blocking item, then flush the microtask
+    queue.enqueue({ priority: 'normal', execute: () => new Promise((r) => setTimeout(r, 100_000)) }).catch(() => {});
+    await vi.advanceTimersByTimeAsync(0); // flush microtask so token is consumed
+
+    // Now enqueue additional items — they must queue since no tokens remain
+    const p1 = queue.enqueue({ priority: 'normal', execute: async () => 'a' });
+    const p2 = queue.enqueue({ priority: 'high', execute: async () => 'b' });
+
+    queue.stop();
+
+    await expect(p1).rejects.toThrow(/shut down/);
+    await expect(p2).rejects.toThrow(/shut down/);
+  });
+
+  it('start() re-enables processing after stop()', async () => {
+    const queue = new PriorityQueue({ rateLimit: { requestsPerSecond: 100 } });
+
+    queue.stop();
+
+    // Enqueue after stop — should process once started again
+    const p = queue.enqueue({ priority: 'normal', execute: async () => 42 });
+    await vi.advanceTimersByTimeAsync(10);
+
+    queue.start();
+    await vi.advanceTimersByTimeAsync(10);
+
+    await expect(p).resolves.toBe(42);
+    await queue.shutdown();
+  });
 });

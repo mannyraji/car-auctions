@@ -65,6 +65,19 @@ export class BrowserPool {
   }
 
   /**
+   * Release a BrowserContext back to the pool.
+   *
+   * Alias for {@link BrowserContext.release} — provided for contract compliance.
+   *
+   * @example
+   * const ctx = await pool.acquireContext();
+   * try { ... } finally { await pool.releaseContext(ctx); }
+   */
+  async releaseContext(context: BrowserContext): Promise<void> {
+    await context.release();
+  }
+
+  /**
    * Acquire a BrowserContext from the pool.
    * Queues if all contexts are in use.
    */

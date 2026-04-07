@@ -156,4 +156,52 @@ describe('BrowserPool', () => {
 
     expect(mockBrowser.close).toHaveBeenCalled();
   });
+
+  it('acquireContext() resolves to a BrowserContext with the same shape as acquire()', async () => {
+    const pool = new BrowserPool({ stealthEnabled: false });
+    const ctx = await pool.acquireContext();
+
+    expect(ctx).toHaveProperty('context');
+    expect(ctx).toHaveProperty('release');
+    expect(ctx).toHaveProperty('createdAt');
+    expect(typeof ctx.release).toBe('function');
+    expect(typeof ctx.createdAt).toBe('number');
+
+    await ctx.release();
+    await pool.shutdown();
+  });
+
+  it('acquireContext() respects maxContexts and queues the request', async () => {
+    const pool = new BrowserPool({ maxContexts: 1, stealthEnabled: false });
+
+    const ctx1 = await pool.acquireContext();
+    let resolved = false;
+    const ctx2Promise = pool.acquireContext().then((ctx) => { resolved = true; return ctx; });
+
+    await new Promise((r) => setTimeout(r, 10));
+    expect(resolved).toBe(false);
+
+    await ctx1.release();
+    const ctx2 = await ctx2Promise;
+    expect(resolved).toBe(true);
+
+    await ctx2.release();
+    await pool.shutdown();
+  });
+
+  it('releaseContext() returns the context to the pool', async () => {
+    const pool = new BrowserPool({ maxContexts: 1, stealthEnabled: false });
+
+    const ctx1 = await pool.acquireContext();
+    const ctx2Promise = pool.acquireContext();
+
+    await pool.releaseContext(ctx1);
+    const ctx2 = await ctx2Promise;
+    expect(ctx2).toBeDefined();
+    // The same underlying Playwright context should be reused for ctx2
+    expect(ctx2.context).toBe(ctx1.context);
+
+    await pool.releaseContext(ctx2);
+    await pool.shutdown();
+  });
 });

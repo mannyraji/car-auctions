@@ -38,6 +38,7 @@ export class PriorityQueue {
   private isMicrotaskScheduled = false;
   private starvationTimer: ReturnType<typeof setInterval> | null = null;
   private isShutdown = false;
+  private isPaused = false;
   private activeCount = 0;
 
   constructor(options?: PriorityQueueOptions) {
@@ -93,29 +94,50 @@ export class PriorityQueue {
   }
 
   /**
-   * Start the queue processing loop.
-   * The queue starts automatically on construction; this is a no-op provided
-   * for symmetry with `stop()` and contract compliance.
+   * Resume the queue processing loop.
+   * The queue starts automatically on construction. After a `stop()` call,
+   * `start()` re-enables processing for newly enqueued requests.
+   * No-op if already running or if permanently shut down via `shutdown()`.
    */
   start(): void {
-    if (!this.isShutdown) {
-      this.scheduleNext();
+    if (this.isShutdown) return;
+    this.isPaused = false;
+    if (!this.starvationTimer) {
+      this.starvationTimer = setInterval(() => this.runStarvationSlot(), 60_000);
     }
+    this.scheduleNext();
   }
 
   /**
-   * Stop processing and cancel all queued requests.
-   * Alias for `shutdown()` — provided for contract compliance.
+   * Pause processing and cancel all currently queued requests.
    *
    * **Note:** pending (not yet executing) requests are immediately rejected
-   * with a `PriorityQueue shut down` error and are **not** executed. Already-
-   * running requests complete normally.
+   * with a `PriorityQueue has been shut down` error and are **not** executed.
+   * Already-running requests complete normally. Call `start()` to resume
+   * processing new requests.
    *
    * @example
    * queue.stop();
+   * // ... later
+   * queue.start();
    */
   stop(): void {
-    this.shutdown().catch(() => {});
+    this.isPaused = true;
+    if (this.processingTimer) {
+      clearTimeout(this.processingTimer);
+      this.processingTimer = null;
+    }
+    if (this.starvationTimer) {
+      clearInterval(this.starvationTimer);
+      this.starvationTimer = null;
+    }
+    // Reject all pending entries
+    for (const queue of this.queues.values()) {
+      for (const entry of queue) {
+        entry.reject(new Error('PriorityQueue has been shut down'));
+      }
+      queue.length = 0;
+    }
   }
 
   /**
@@ -142,7 +164,7 @@ export class PriorityQueue {
     // Reject all pending entries
     for (const queue of this.queues.values()) {
       for (const entry of queue) {
-        entry.reject(new Error('PriorityQueue shut down'));
+        entry.reject(new Error('PriorityQueue has been shut down'));
       }
       queue.length = 0;
     }
@@ -173,7 +195,7 @@ export class PriorityQueue {
   // ─── Private ─────────────────────────────────────────────────────────────────
 
   private scheduleNext(): void {
-    if ((this.processingTimer !== null || this.isMicrotaskScheduled) || this.isShutdown) return;
+    if ((this.processingTimer !== null || this.isMicrotaskScheduled) || this.isShutdown || this.isPaused) return;
 
     const entry = this.peekNext();
     if (!entry) return;
@@ -199,7 +221,7 @@ export class PriorityQueue {
   }
 
   private processNext(): void {
-    if (this.isShutdown) return;
+    if (this.isShutdown || this.isPaused) return;
 
     this.refillTokens();
     if (this.tokens < 1) {
