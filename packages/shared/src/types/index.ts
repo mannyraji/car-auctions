@@ -301,10 +301,17 @@ export interface McpServerOptions {
 /** Priority tier for queue entries */
 export type PriorityLevel = 'critical' | 'high' | 'normal' | 'low' | 'background';
 
-/** A queued request item */
+/**
+ * A queued request item.
+ *
+ * When calling `PriorityQueue.enqueue()`, pass `Omit<PriorityRequest<T>, 'id' | 'enqueuedAt'>` —
+ * the queue auto-assigns `id` (UUID) and `enqueuedAt` (ms timestamp) before dispatching.
+ */
 export interface PriorityRequest<T = void> {
+  /** Auto-assigned UUID — do not supply when calling enqueue() */
   id: string;
   priority: PriorityLevel;
+  /** Auto-assigned epoch ms — do not supply when calling enqueue() */
   enqueuedAt: number;
   execute: () => Promise<T>;
 }
