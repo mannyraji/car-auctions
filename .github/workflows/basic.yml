@@ -21,6 +21,7 @@ jobs:
           if [ -f package.json ]; then
             echo "has_package_json=true" >> "$GITHUB_OUTPUT"
           else
+            echo "No package.json found; skipping Node.js setup, install, test, lint, and formatting steps."
             echo "has_package_json=false" >> "$GITHUB_OUTPUT"
           fi
 
