@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import os from 'os';
+import path from 'path';
+import fs from 'fs';
 import { validateVin } from '../src/vin-decoder/validator.js';
 import { decodeVin } from '../src/vin-decoder/decoder.js';
 import { InMemoryVinCache } from '../src/vin-decoder/memory-cache.js';
+import { SqliteVinCache } from '../src/vin-decoder/sqlite-cache.js';
 import nhtsaFixture from './fixtures/nhtsa-decode-response.json';
 
 const VALID_VIN = '1HGCM82633A004352';
@@ -200,5 +204,227 @@ describe('InMemoryVinCache', () => {
     expect(await cache.get('VIN00000000000001A')).toBeNull();
     expect(await cache.get('VIN00000000000002A')).not.toBeNull();
     expect(await cache.get('VIN00000000000003A')).not.toBeNull();
+  });
+
+  it('size property returns current entry count', async () => {
+    const cache = new InMemoryVinCache();
+    expect(cache.size).toBe(0);
+    await cache.set(VALID_VIN, { vin: VALID_VIN, year: 2003 } as import('../src/types/index.js').VINDecodeResult, 60_000);
+    expect(cache.size).toBe(1);
+  });
+
+  it('clear() removes all entries', async () => {
+    const cache = new InMemoryVinCache();
+    await cache.set(VALID_VIN, { vin: VALID_VIN, year: 2003 } as import('../src/types/index.js').VINDecodeResult, 60_000);
+    cache.clear();
+    expect(cache.size).toBe(0);
+    expect(await cache.get(VALID_VIN)).toBeNull();
+  });
+});
+
+// ─── decodeVin edge cases ─────────────────────────────────────────────────────
+
+describe('decodeVin edge cases', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('throws when NHTSA returns empty Results array', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve({ Count: 0, Message: 'Empty', Results: [] }),
+    } as Response);
+
+    await expect(decodeVin(VALID_VIN)).rejects.toThrow(/NHTSA API error/);
+  });
+
+  it('builds engineType fallback from cylinders and displacement when EngineModel is absent', async () => {
+    const responseWithoutEngineModel = {
+      ...nhtsaFixture,
+      Results: [
+        {
+          ...(nhtsaFixture.Results[0] as Record<string, string>),
+          EngineModel: '',
+          EngineCylinders: '6',
+          DisplacementL: '3.5',
+        },
+      ],
+    };
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve(responseWithoutEngineModel),
+    } as Response);
+
+    const result = await decodeVin(VALID_VIN);
+    expect(result.engineType).toBe('6-cyl 3.5L');
+  });
+
+  it('sets engineType to null when EngineModel and cyl/disp are all absent', async () => {
+    const responseNoEngine = {
+      ...nhtsaFixture,
+      Results: [
+        {
+          ...(nhtsaFixture.Results[0] as Record<string, string>),
+          EngineModel: '',
+          EngineCylinders: '',
+          DisplacementL: '',
+        },
+      ],
+    };
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve(responseNoEngine),
+    } as Response);
+
+    const result = await decodeVin(VALID_VIN);
+    expect(result.engineType).toBeNull();
+  });
+
+  it('handles non-Error thrown by fetch (covers String(err) branch)', async () => {
+    // Throw a plain string, not an Error instance
+    vi.mocked(fetch).mockRejectedValue('plain string error');
+
+    await expect(decodeVin(VALID_VIN)).rejects.toThrow(/NHTSA API error/);
+  });
+
+  it('maps null for optional NHTSA fields when they are absent', async () => {
+    // Response with all optional fields empty/absent
+    const minimalResponse = {
+      Count: 1,
+      Message: 'Results returned successfully',
+      Results: [
+        {
+          VIN: VALID_VIN,
+          Make: 'HONDA',
+          Model: 'Accord',
+          ModelYear: '2003',
+          Trim: '',
+          EngineModel: '',
+          BodyClass: '',
+          DriveType: '',
+          FuelTypePrimary: '',
+          TransmissionStyle: '',
+          EngineCylinders: '',
+          DisplacementL: '',
+          Manufacturer: '',
+          PlantCountry: '',
+          VehicleType: '',
+          ErrorCode: '0',
+        },
+      ],
+    };
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve(minimalResponse),
+    } as Response);
+
+    const result = await decodeVin(VALID_VIN);
+    expect(result.trim).toBeNull();
+    expect(result.bodyClass).toBeNull();
+    expect(result.driveType).toBeNull();
+    expect(result.fuelType).toBeNull();
+    expect(result.transmission).toBeNull();
+    expect(result.cylinders).toBeNull();
+    expect(result.displacementL).toBeNull();
+    expect(result.manufacturer).toBeNull();
+    expect(result.plantCountry).toBeNull();
+    expect(result.vehicleType).toBeNull();
+    expect(result.engineType).toBeNull();
+  });
+});
+
+// ─── SqliteVinCache ───────────────────────────────────────────────────────────
+
+describe('SqliteVinCache', () => {
+  let dbPath: string;
+  let cache: SqliteVinCache;
+
+  beforeEach(() => {
+    dbPath = path.join(os.tmpdir(), `vin-cache-test-${Date.now()}.sqlite`);
+    cache = new SqliteVinCache(dbPath);
+  });
+
+  afterEach(() => {
+    try {
+      cache.close();
+    } catch {
+      // already closed
+    }
+    try {
+      fs.unlinkSync(dbPath);
+    } catch {
+      // file may not exist
+    }
+  });
+
+  it('returns null for a VIN not in cache', async () => {
+    expect(await cache.get(VALID_VIN)).toBeNull();
+  });
+
+  it('stores and retrieves a VIN result', async () => {
+    const result: import('../src/types/index.js').VINDecodeResult = {
+      vin: VALID_VIN,
+      year: 2003,
+      make: 'HONDA',
+      model: 'Accord',
+      trim: 'EX',
+      engineType: '4-cyl 2.4L',
+      bodyClass: 'Sedan/Saloon',
+      driveType: 'FWD',
+      fuelType: 'Gasoline',
+      transmission: 'Automatic',
+      cylinders: 4,
+      displacementL: 2.4,
+      manufacturer: 'HONDA',
+      plantCountry: 'USA',
+      vehicleType: 'PASSENGER CAR',
+      errorCode: '0',
+    };
+
+    await cache.set(VALID_VIN, result, 90 * 24 * 60 * 60 * 1000);
+    const retrieved = await cache.get(VALID_VIN);
+
+    expect(retrieved).not.toBeNull();
+    expect(retrieved?.vin).toBe(VALID_VIN);
+    expect(retrieved?.make).toBe('HONDA');
+    expect(retrieved?.year).toBe(2003);
+  });
+
+  it('returns null after TTL expires', async () => {
+    vi.useFakeTimers();
+    const result = { vin: VALID_VIN, year: 2003 } as import('../src/types/index.js').VINDecodeResult;
+    await cache.set(VALID_VIN, result, 1000);
+
+    vi.advanceTimersByTime(2000);
+
+    expect(await cache.get(VALID_VIN)).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('overwrites an existing entry on set', async () => {
+    const r1 = { vin: VALID_VIN, year: 2003 } as import('../src/types/index.js').VINDecodeResult;
+    const r2 = { vin: VALID_VIN, year: 2020 } as import('../src/types/index.js').VINDecodeResult;
+
+    await cache.set(VALID_VIN, r1, 60_000);
+    await cache.set(VALID_VIN, r2, 60_000);
+
+    const retrieved = await cache.get(VALID_VIN);
+    expect(retrieved?.year).toBe(2020);
+  });
+
+  it('closes the database cleanly', () => {
+    expect(() => cache.close()).not.toThrow();
   });
 });
