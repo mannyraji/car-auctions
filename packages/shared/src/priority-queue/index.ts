@@ -104,8 +104,13 @@ export class PriorityQueue {
   }
 
   /**
-   * Stop processing and drain all queued requests.
+   * Stop processing and cancel all queued requests.
    * Alias for `shutdown()` — provided for contract compliance.
+   *
+   * **Note:** pending (not yet executing) requests are immediately rejected
+   * with a `PriorityQueue shut down` error and are **not** executed. Already-
+   * running requests complete normally. "Drain" in the API contract means the
+   * queue is cleared, not that requests are finished.
    *
    * @example
    * queue.stop();
