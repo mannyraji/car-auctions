@@ -56,7 +56,7 @@ export function normalizeCopartListing(raw: CopartRawListing): AuctionListing {
     color: String(raw.clr ?? ''),
     current_bid: Number(raw.dynamicBidAmount ?? 0),
     buy_it_now: raw.bin !== undefined ? Number(raw.bin) : undefined,
-    sale_date: (raw.ad && String(raw.ad).trim()) ? String(raw.ad) : new Date().toISOString(),
+    sale_date: String(raw.ad ?? new Date().toISOString()),
     sale_status: 'upcoming',
     location: String(raw.la ?? ''),
     location_zip: String(raw.zip ?? ''),

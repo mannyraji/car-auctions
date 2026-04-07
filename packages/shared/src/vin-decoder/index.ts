@@ -2,18 +2,17 @@
  * @file src/vin-decoder/index.ts
  * @description Public exports for the VIN decoder module.
  *
- * Only validateVin, decodeVin, VinCache, and FifoVinCache (for tests) are exported.
- * SqliteVinCache is intentionally NOT exported here — consumers that need the
- * production SQLite cache should import it via the top-level package barrel
- * (src/index.ts re-exports it explicitly for test/internal use).
+ * Only validateVin, decodeVin, and the VinCache interface are exported.
+ * Internal modules (nhtsa-client.ts, sqlite-cache.ts) are NOT re-exported.
+ * FifoVinCache is exported for test usage.
  */
 
 import type { VINDecodeResult } from '../types/index.js';
 import { ScraperError } from '../errors.js';
 import { fetchVinFromNhtsa } from './nhtsa-client.js';
 
-// FifoVinCache exported for in-memory test convenience
-export { FifoVinCache } from './sqlite-cache.js';
+// Re-export FifoVinCache for testing convenience
+export { FifoVinCache, SqliteVinCache } from './sqlite-cache.js';
 
 /** Default VIN cache TTL: 90 days in milliseconds */
 const DEFAULT_TTL_MS = 90 * 24 * 60 * 60 * 1000;

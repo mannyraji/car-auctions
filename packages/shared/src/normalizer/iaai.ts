@@ -64,7 +64,7 @@ export function normalizeIaaiListing(raw: IaaiRawListing): AuctionListing {
     color: String(raw.color ?? ''),
     current_bid: Number(raw.currentBid ?? 0),
     buy_it_now: raw.buyNowPrice !== undefined ? Number(raw.buyNowPrice) : undefined,
-    sale_date: (raw.saleDate && String(raw.saleDate).trim()) ? String(raw.saleDate) : new Date().toISOString(),
+    sale_date: String(raw.saleDate ?? new Date().toISOString()),
     sale_status: 'upcoming',
     location: String(raw.branch ?? ''),
     location_zip: String(raw.zipCode ?? ''),
