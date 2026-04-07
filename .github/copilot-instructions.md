@@ -149,3 +149,12 @@ Project-specific security rules:
 
 - **Technical Spec**: `docs/spec.md` — tool definitions, type interfaces, architecture
 - **Implementation Plan**: `docs/plan.md` — 10 phases, acceptance criteria, dependency graph
+
+## Active Technologies
+- TypeScript 5+ / Node.js 20+ / @modelcontextprotocol/sdk (001-shared-utilities-lib)
+- better-sqlite3 (WAL mode, VIN cache) (001-shared-utilities-lib)
+
+## Recent Changes
+- 001-shared-utilities-lib: Added TypeScript 5+ / Node.js 20+ / @modelcontextprotocol/sdk
+
+**Last updated**: 2026-04-07
