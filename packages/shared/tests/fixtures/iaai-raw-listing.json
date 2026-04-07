@@ -1,0 +1,36 @@
+{
+  "stockNumber": "A12345678",
+  "vin": "1HGCM82633A004352",
+  "year": 2003,
+  "makeName": "Honda",
+  "modelName": "Accord",
+  "trimLevel": "EX",
+  "titleCode": "SV",
+  "primaryDamage": "Front End",
+  "secondaryDamage": "Undercarriage",
+  "hasKeys": "YES",
+  "odometer": "142300",
+  "odometerBrand": "ACTUAL",
+  "color": "Silver",
+  "engineSize": "2.4L I4 DOHC 16V",
+  "transmission": "Automatic",
+  "driveType": "FWD",
+  "fuelType": "Gas",
+  "cylinders": "4",
+  "currentBid": 2400,
+  "buyNowPrice": 4800,
+  "saleDate": "2026-04-20T10:00:00Z",
+  "saleStatus": "UPCOMING",
+  "finalBid": null,
+  "branchName": "Houston North",
+  "latitude": 29.9902,
+  "longitude": -95.3368,
+  "imageUrls": {
+    "large": [
+      "https://vg.iaai.com/12345678_1_lrg.jpg",
+      "https://vg.iaai.com/12345678_2_lrg.jpg"
+    ]
+  },
+  "detailUrl": "https://www.iaai.com/VehicleDetail/A12345678",
+  "seller": "Allstate Insurance"
+}
