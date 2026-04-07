@@ -257,16 +257,20 @@ All error classes extend a base `AppError` that includes `code`, `message`, `ret
 
 ```typescript
 type ErrorCode =
-  | 'SCRAPER_ERROR'
-  | 'CAPTCHA_DETECTED'
-  | 'RATE_LIMITED'
-  | 'CACHE_ERROR'
-  | 'ANALYSIS_ERROR'
-  | 'TIMEOUT'
-  | 'VALIDATION_ERROR'
-  | 'NOT_FOUND'
-  | 'VIN_DECODE_ERROR'
-  | 'UNKNOWN_ERROR';
+  | 'SCRAPER_ERROR'              // Generic scraper failure
+  | 'CAPTCHA_DETECTED'           // CAPTCHA encountered, cannot proceed
+  | 'RATE_LIMITED'               // 429 or per-request rate limit
+  | 'RATE_LIMIT_DAILY_CAP'       // Daily request cap exceeded
+  | 'RATE_LIMIT_QUEUE_FULL'      // Priority queue overflow, retry later
+  | 'CACHE_ERROR'                // Cache read/write failure
+  | 'ANALYSIS_ERROR'             // Deal analysis pipeline failure
+  | 'VALIDATION_ERROR'           // Invalid input (bad VIN, lot number, zip)
+  | 'AUTH_ERROR'                 // Login failed for auction site
+  | 'NOT_FOUND'                  // Lot/stock number not found
+  | 'TIMEOUT'                    // Navigation or API call timeout
+  | 'NMVTIS_COST_GUARD'          // NMVTIS called in batch context
+  | 'DOWNSTREAM_UNAVAILABLE'     // Gateway: downstream server down
+  | 'VISION_ERROR';              // AI vision analysis failure
 ```
 
 ---

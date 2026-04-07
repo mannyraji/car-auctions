@@ -417,8 +417,8 @@ class BrowserPool {
 type PriorityLevel = 'critical' | 'high' | 'normal' | 'low' | 'background';
 
 interface PriorityRequest<T = unknown> {
-  /** Unique request ID */
-  id: string;
+  /** Unique request ID — auto-assigned by the queue */
+  readonly id: string;
   
   /** Priority level */
   priority: PriorityLevel;
@@ -426,8 +426,8 @@ interface PriorityRequest<T = unknown> {
   /** The async operation to execute */
   execute: () => Promise<T>;
   
-  /** Enqueue timestamp (auto-set by queue) */
-  enqueuedAt: number;
+  /** Enqueue timestamp — auto-set by the queue */
+  readonly enqueuedAt: number;
   
   /** Optional timeout in ms (default: 30000) */
   timeout?: number;
@@ -473,26 +473,26 @@ class PriorityQueue {
 
 | Priority | Max Wait | Behavior |
 |----------|----------|----------|
-| `critical` | Immediate | Bypasses queue ordering, still respects rate limit |
+| `critical` | Immediate | Bypasses queue ordering and rate limiting entirely; dispatches immediately to satisfy hard `<100ms` guarantee |
 | `high` | 2s | Preempts `normal`/`low`/`background` |
 | `normal` | 5s | Default priority |
 | `low` | 10s | Yields to higher priorities |
 | `background` | 30s | Lowest priority, best-effort |
 
-**Starvation Prevention**: A sliding window counter tracks `low`/`background` execution. If 60 seconds pass without either executing, the next dequeue promotes the oldest `low`/`background` request regardless of pending higher-priority requests.
+**Starvation Prevention**: A sliding window counter tracks `low`/`background` execution among rate-limited priorities. If 60 seconds pass without either executing, the next dequeue promotes the oldest `low`/`background` request regardless of pending higher-priority requests. This starvation-prevention rule does not delay `critical` dispatch.
 
-**Token Bucket Algorithm**: Default configuration: 0.333 tokens/second (1 request per 3 seconds), max burst of 1 token. Tokens accumulate when queue is idle. `critical` requests still consume tokens but bypass ordering.
+**Token Bucket Algorithm**: Default configuration: 0.333 tokens/second (1 request per 3 seconds), max burst of 1 token. Tokens accumulate when queue is idle. The token bucket applies to `high`, `normal`, `low`, and `background` requests only. `critical` requests bypass the token bucket entirely and do not consume tokens.
 
 ---
 
 ### Auction Normalizer Field Defaults
 
-When a field is missing or invalid in the raw source data, the normalizer applies these defaults:
+The auction normalizer is **non-throwing** on malformed or incomplete upstream source payloads. When a field is missing or invalid in raw source data, the normalizer coerces it to the defaults below and returns a best-effort `AuctionListing` shape. Validation of required identifiers for request handling belongs at the MCP tool boundary or other explicit validation layer, not inside the normalizer.
 
 | Field | Default Value | Notes |
 |-------|---------------|-------|
-| `lot_number` | Required | Throws if missing |
-| `vin` | Required | Throws if missing or invalid |
+| `lot_number` | `null` | String when present; `null` when missing/invalid. Callers that require a lot number must validate separately. |
+| `vin` | `null` | Normalized 17-character VIN when valid; `null` when missing/invalid. Callers that require a valid VIN must validate separately. |
 | `source` | Auto-set | `'copart'` or `'iaai'` based on normalizer |
 | `year` | `null` | Numeric or null |
 | `make` | `'Unknown'` | String |
