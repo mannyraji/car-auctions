@@ -6,7 +6,7 @@
 
 ## Content Quality
 
-- [x] No implementation details (languages, frameworks, APIs)
+- [ ] No implementation details (languages, frameworks, APIs)
 - [x] Focused on user value and business needs
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed
@@ -27,10 +27,11 @@
 - [x] All functional requirements have clear acceptance criteria
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
-- [x] No implementation details leak into specification
+- [ ] No implementation details leak into specification
 
 ## Notes
 
-- All items pass. Spec is ready for `/speckit.clarify` or `/speckit.plan`.
-- The spec deliberately avoids naming specific technologies (TypeScript, Playwright, SQLite, OpenTelemetry) in functional requirements — those are implementation decisions for the planning phase.
+- Spec is ready for `/speckit.clarify` or `/speckit.plan`.
+- **Implementation Specifications section**: The spec intentionally includes TypeScript interface signatures, SQLite schemas, and class definitions as **API contract specifications** (not implementation details). These define the public surface that consumers depend on and are necessary for cross-package alignment. This is why the "no implementation details" checks are unchecked — the spec has evolved beyond a pure requirements document to include API contracts.
 - NOTE: Success criteria SC-002 and SC-004 include timing metrics; these describe observable user/operator experience thresholds, not internal system benchmarks.
+- All enum values (`odometer_status`, `sale_status`) aligned to `docs/spec.md` canonical definitions (lowercase snake_case).

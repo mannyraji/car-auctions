@@ -1,16 +1,17 @@
 <!--
 Sync Impact Report
 ==================
-Version change:    1.0.0 → 1.1.0 (MINOR bump — new pillar + rule expansions, no backward-incompatible changes)
+Version change:    1.1.0 → 1.2.0 (MINOR bump — stability-first context management rule added to Pillar V)
 Modified principles:
+  - V.   Developer Experience & Consistency — Rule 6 added (stability-first context management)
+
+Prior changes (1.0.0 → 1.1.0):
   - II.  Data Integrity & Caching — Rule 1 expanded with StaleableResponse<T> shape contract
   - III. Test-First Quality Standards — Rule 2 expanded with ≥ 80% branch coverage threshold
   - IV.  Performance & Reliability — Rule 5 added (30s/60s timeout SLAs)
   - V.   Developer Experience & Consistency — Rule 3 expanded with error→condition mapping table
   - Quality Gates — CI enforcement sentence added to preamble; Gate 8 (Observability) added
   - Governance — Amendment approval and deprecation policy bullets added
-
-Added sections:
   - VI.  Observability & Traceability (new pillar)
 
 Removed sections: None
@@ -287,6 +288,24 @@ gateway to route predictably and gives AI consumers a stable, auditable interfac
    New top-level source directories require explicit justification in the PR.
    *(→ copilot-instructions.md § Package Structure Pattern)*
 
+6. **Don't break what works — stability-first context management**: Established, working
+   patterns MUST NOT be refactored, renamed, restructured, or replaced unless explicitly
+   requested by the developer or required by a constitution amendment. This includes:
+   - Existing file and directory structures that follow the canonical layout.
+   - Established naming conventions already in use across the codebase.
+   - Working scraper architectures (browser → client → interceptor → parser).
+   - Cache layer implementations with correct TTLs.
+   - Test fixtures and test structure that currently pass.
+   - Anti-bot strategy configurations already deployed.
+   - Error handling patterns that conform to Pillar V Rule 3.
+
+   When making changes, the scope MUST be limited to what is explicitly requested.
+   "Drive-by" refactors — renaming, restructuring, or "improving" adjacent working
+   code as part of an unrelated task — are forbidden. If a structural improvement is
+   identified, it MUST be proposed as a separate, reviewed change and MUST NOT be
+   bundled silently into an unrelated task or PR.
+   *(→ Governance § Context management)*
+
 **Violation examples**:
 
 ```typescript
@@ -303,6 +322,18 @@ throw new Error('Rate limit exceeded'); // must be: throw new RateLimitError(...
 // ❌ 429 mapped to the wrong error class
 if (response.status === 429) throw new ScraperError('too many requests');
 // must be: throw new RateLimitError('too many requests')
+
+// ❌ Unsolicited refactor during an unrelated task
+// Task: "Add timeout to copart_get_listing"
+// Developer also renames parser functions and restructures return types — forbidden
+
+// ❌ Replacing established error pattern with unrequested alternative
+// Working: throw new RateLimitError('...')
+// Changed to: return Result.err(new RateLimitError('...')) — not requested, forbidden
+
+// ❌ Reorganizing passing tests into a "better" structure during a bug fix
+// tests/parser.test.ts split into tests/parser/{search,listing,images}.test.ts
+// without explicit request — forbidden
 ```
 
 ---
@@ -360,6 +391,7 @@ blocked from merge via branch protection rules.
 - **Gate 6 – Types**: No bare `Error` throws from handlers; no local type redefinitions; `@car-auctions/shared` used exclusively; error→condition mapping followed.
 - **Gate 7 – Build**: `tsc --noEmit` and ESLint pass with zero errors or warnings.
 - **Gate 8 – Observability**: OTEL spans emitted for all tool invocations with required attributes; spans exported via OTLP; no `console`-only observability in production builds.
+- **Gate 9 – Stability**: No unsolicited refactors of working patterns; change scope matches task scope; established conventions preserved per Pillar V Rule 6.
 
 ## Governance
 
@@ -376,4 +408,4 @@ blocked from merge via branch protection rules.
 - Canonical sources of truth for project conventions:
   `.github/copilot-instructions.md` and `.github/copilot-shared/instructions/coding-standards.md`.
 
-**Version**: 1.1.0 | **Ratified**: 2026-04-06 | **Last Amended**: 2026-04-06
+**Version**: 1.2.0 | **Ratified**: 2026-04-06 | **Last Amended**: 2026-04-06
