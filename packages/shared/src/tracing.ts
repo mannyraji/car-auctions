@@ -5,9 +5,12 @@
  * Must be called once at application startup before MCP tool handlers are registered.
  */
 
+import { createRequire } from 'node:module';
 import type { SpanAttributes } from './types/index.js';
 
 export type { SpanAttributes };
+
+const require = createRequire(import.meta.url);
 
 /** Module-level initialization guard — prevents double-initialization. */
 let _tracingInitialized = false;

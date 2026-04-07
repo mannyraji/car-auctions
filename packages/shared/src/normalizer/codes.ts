@@ -29,12 +29,13 @@ export const TITLE_CODE_MAP: Record<string, string> = {
  * @returns Human-readable label or "Unknown"
  */
 export function titleCodeToLabel(code: string): string {
-  const label = TITLE_CODE_MAP[code];
+  const normalized = (code ?? '').trim().toUpperCase();
+  const label = TITLE_CODE_MAP[normalized];
   if (label !== undefined) {
     return label;
   }
   if (process.env['NODE_ENV'] !== 'production') {
-    console.warn(`[car-auctions/shared] Unknown IAAI titleCode: "${code}". Defaulting to "Unknown".`);
+    console.warn(`[car-auctions/shared] Unknown IAAI titleCode: "${normalized}". Defaulting to "Unknown".`);
   }
   return 'Unknown';
 }

@@ -78,6 +78,20 @@ describe('normalizeCopart', () => {
     };
     expect(() => normalizeCopart(minimal)).not.toThrow();
   });
+
+  it('defaults sale_date to ISO 8601 when upstream value is empty string', () => {
+    const raw: CopartRawListing = {
+      lotNumberStr: 'TEST',
+      mkn: 'Ford', mmod: 'F-150', lcy: 2020, dd: 'All Over',
+      orr: 0, odometerBrand: 'ACTUAL', la: 'TX', dynamicBidAmount: 0,
+      tims: { full: [] }, ad: '', hk: false, dr: false, ts: 'TX', tt: 'Clean',
+    };
+    const listing = normalizeCopart(raw);
+    expect(listing.sale_date).toBeTruthy();
+    // Should be a valid ISO date string, not an empty string
+    expect(() => new Date(listing.sale_date)).not.toThrow();
+    expect(new Date(listing.sale_date).getTime()).not.toBeNaN();
+  });
 });
 
 describe('normalizeIaai', () => {
@@ -168,6 +182,31 @@ describe('normalizeIaai', () => {
       images: [],
     };
     expect(() => normalizeIaai(minimal)).not.toThrow();
+  });
+
+  it('defaults sale_date to ISO 8601 when upstream value is empty string', () => {
+    const raw: IaaiRawListing = {
+      stockNumber: 'TEST', year: 2020, makeName: 'Ford', modelName: 'F-150',
+      primaryDamage: 'All Over', odometerReading: 0, odometerUnit: 'Miles',
+      branch: 'TX', currentBid: 0, saleDate: '', hasKeys: 'NO',
+      titleState: 'TX', titleCode: 'CL', images: [],
+    };
+    const listing = normalizeIaai(raw);
+    expect(listing.sale_date).toBeTruthy();
+    expect(() => new Date(listing.sale_date)).not.toThrow();
+    expect(new Date(listing.sale_date).getTime()).not.toBeNaN();
+  });
+
+  it('maps lowercase titleCode to the correct label (case-insensitive lookup)', () => {
+    const raw = { ...iaaiFixture, titleCode: 'sv' } as IaaiRawListing;
+    const listing = normalizeIaai(raw);
+    expect(listing.title_type).toBe('Salvage');
+  });
+
+  it('maps titleCode with surrounding whitespace to the correct label', () => {
+    const raw = { ...iaaiFixture, titleCode: ' SV ' } as IaaiRawListing;
+    const listing = normalizeIaai(raw);
+    expect(listing.title_type).toBe('Salvage');
   });
 });
 

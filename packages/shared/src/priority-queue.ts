@@ -7,6 +7,7 @@
  * Starvation prevention: low/background guaranteed 1 slot per starvationThresholdMs.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { PriorityLevel, PriorityRequest } from './types/index.js';
 import { ScraperError } from './errors.js';
 
@@ -173,7 +174,7 @@ export class PriorityQueue {
 
     return new Promise<T>((resolve, reject) => {
       const request: PriorityRequest<T> = {
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         priority,
         enqueuedAt: Date.now(),
         fn,
