@@ -186,9 +186,10 @@ Starvation prevention: `low`/`background` guaranteed 1 slot per 60s under sustai
 @modelcontextprotocol/sdk
 playwright playwright-extra puppeteer-extra-plugin-stealth
 better-sqlite3 @types/better-sqlite3
-@opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http
+sharp @types/sharp
+@opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node @opentelemetry/exporter-trace-otlp-http
 ws @types/ws
-@types/node
+dotenv
 ```
 
 ### Acceptance Criteria
