@@ -1,0 +1,20 @@
+{
+  "name": "car-auctions",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "alerts"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run --workspaces --if-present build",
+    "lint": "eslint packages/ alerts/",
+    "lint:fix": "eslint --fix packages/ alerts/",
+    "format": "prettier --write 'packages/*/src/**/*.ts' 'alerts/src/**/*.ts'",
+    "format:check": "prettier --check 'packages/*/src/**/*.ts' 'alerts/src/**/*.ts'",
+    "test": "npm run --workspaces --if-present test"
+  }
+}
