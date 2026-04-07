@@ -4,6 +4,7 @@ dist/
 build/
 *.log
 .env*
+*.tsbuildinfo
 
 # Workspace outputs
 coverage/
@@ -15,3 +16,5 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+data/
+packages/shared/data/

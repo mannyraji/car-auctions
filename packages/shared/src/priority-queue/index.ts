@@ -35,6 +35,7 @@ export class PriorityQueue {
 
   // Internal processing state
   private processingTimer: ReturnType<typeof setTimeout> | null = null;
+  private isMicrotaskScheduled = false;
   private starvationTimer: ReturnType<typeof setInterval> | null = null;
   private isShutdown = false;
   private activeCount = 0;
@@ -138,7 +139,7 @@ export class PriorityQueue {
   // ─── Private ─────────────────────────────────────────────────────────────────
 
   private scheduleNext(): void {
-    if (this.processingTimer !== null || this.isShutdown) return;
+    if ((this.processingTimer !== null || this.isMicrotaskScheduled) || this.isShutdown) return;
 
     const entry = this.peekNext();
     if (!entry) return;
@@ -148,9 +149,9 @@ export class PriorityQueue {
     if (this.tokens >= 1) {
       // Defer via microtask so all synchronous enqueue() calls complete before
       // we pick the highest-priority item. Microtasks are NOT blocked by fake timers.
-      this.processingTimer = -1 as unknown as ReturnType<typeof setTimeout>; // sentinel
+      this.isMicrotaskScheduled = true;
       queueMicrotask(() => {
-        this.processingTimer = null;
+        this.isMicrotaskScheduled = false;
         if (!this.isShutdown) this.processNext();
       });
     } else {
