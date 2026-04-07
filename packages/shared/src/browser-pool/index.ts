@@ -53,6 +53,20 @@ export class BrowserPool {
   /**
    * Acquire a BrowserContext from the pool.
    * Queues if all contexts are in use.
+   *
+   * Alias for {@link BrowserPool.acquire} — provided for contract compliance.
+   *
+   * @example
+   * const ctx = await pool.acquireContext();
+   * try { ... } finally { await ctx.release(); }
+   */
+  async acquireContext(): Promise<BrowserContext> {
+    return this.acquire();
+  }
+
+  /**
+   * Acquire a BrowserContext from the pool.
+   * Queues if all contexts are in use.
    */
   async acquire(): Promise<BrowserContext> {
     if (this.shutdownCalled) {
