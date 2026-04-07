@@ -117,7 +117,9 @@ class TokenBucket {
     const tokensToAdd = Math.floor(elapsed / this.refillIntervalMs);
     if (tokensToAdd > 0) {
       this.tokens = Math.min(this.maxTokens, this.tokens + tokensToAdd);
-      this.lastRefillTime = now + (tokensToAdd * this.refillIntervalMs) - elapsed;
+      // Advance lastRefillTime by whole intervals to maintain cadence;
+      // fractional elapsed time carries forward correctly on the next refill.
+      this.lastRefillTime = this.lastRefillTime + (tokensToAdd * this.refillIntervalMs);
     }
   }
 }
@@ -349,10 +351,12 @@ CREATE INDEX IF NOT EXISTS idx_vin_cache_expires ON vin_cache(expires_at);
 
 On `get(vin)`: check `expires_at > Date.now()`. Expired entries return `null` (cache miss). A background cleanup sweeps expired rows on DB open.
 
-### In-Memory LRU Fallback (Testing)
+### In-Memory FIFO-Eviction Cache (Testing)
+
+A lightweight insertion-order cache for use in tests. Evicts the oldest-inserted entry when at capacity. Unlike a true LRU, it does not track access recency — this is intentional for test simplicity. (Production code uses the SQLite cache.)
 
 ```typescript
-class LruVinCache implements VinCache {
+class FifoVinCache implements VinCache {
   private cache = new Map<string, { result: VINDecodeResult; expiresAt: number }>();
   private readonly maxSize = 200;
 
@@ -364,8 +368,9 @@ class LruVinCache implements VinCache {
 
   set(vin: string, result: VINDecodeResult, ttlMs: number): void {
     if (this.cache.size >= this.maxSize) {
-      // Evict oldest entry
-      this.cache.delete(this.cache.keys().next().value);
+      // Evict oldest-inserted entry (Map iteration is insertion-order)
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey !== undefined) this.cache.delete(oldestKey);
     }
     this.cache.set(vin, { result, expiresAt: Date.now() + ttlMs });
   }
