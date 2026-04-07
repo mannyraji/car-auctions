@@ -22,7 +22,7 @@ jobs:
             echo "has_npm_lockfile=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_npm_lockfile=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping Node.js checks because no root package.json and npm lockfile were found."
+            echo "Skipping Node.js checks because both a root package.json and an npm lockfile (package-lock.json or npm-shrinkwrap.json) are required."
           fi
 
           if find . -maxdepth 2 \( -name 'tsconfig.json' -o -name 'tsconfig.*.json' \) | grep -q .; then
