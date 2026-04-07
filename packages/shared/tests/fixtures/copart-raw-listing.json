@@ -1,0 +1,34 @@
+{
+  "lotNumberStr": "71234567",
+  "fv": "1HGCM82633A004352",
+  "mkn": "Honda",
+  "mdn": "Accord",
+  "lcy": 2003,
+  "dd": "FRONT END",
+  "sdd": "MINOR DENTS/SCRATCHES",
+  "htsmn": "Yes",
+  "orr": 142300,
+  "clr": "SILVER",
+  "egn": "4-2.4L",
+  "tsmn": "AUTOMATIC",
+  "tmtp": "SV",
+  "ld": "Houston - North, TX",
+  "lat": 29.9902,
+  "lng": -95.3368,
+  "dynamicLotDetails": {
+    "currentBid": 2400,
+    "buyItNowPrice": 4800
+  },
+  "bn": 4800,
+  "sd": "2026-04-20T10:00:00Z",
+  "ss": "UPCOMING",
+  "fb": null,
+  "imgUrl": "https://cs.copart.com/v1/AUTH_/lphotos/71234567_pri.jpg",
+  "tims": {
+    "primary": "https://cs.copart.com/v1/AUTH_/lphotos/71234567_pri.jpg",
+    "secondary": "https://cs.copart.com/v1/AUTH_/lphotos/71234567_sec.jpg"
+  },
+  "du": "https://www.copart.com/lot/71234567",
+  "slr": "State Farm",
+  "driveType": "FWD"
+}
