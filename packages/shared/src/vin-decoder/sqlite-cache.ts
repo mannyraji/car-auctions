@@ -34,9 +34,10 @@ export class SqliteVinCache implements VinCache {
 
   constructor(dbPath = 'data/vin-cache.sqlite') {
     try {
-      // Dynamic import to keep it lazy and testable
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const Database = require('better-sqlite3');
+      // Using require() for CJS-only native module (better-sqlite3) in ESM context.
+      // This is intentional — better-sqlite3 does not have an ESM build.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Database = require('better-sqlite3') as new (path: string) => any;
       this.db = new Database(dbPath);
       this.db.pragma('journal_mode = WAL');
       this._initialize();
