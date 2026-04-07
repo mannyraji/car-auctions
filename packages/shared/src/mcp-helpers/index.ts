@@ -22,6 +22,12 @@ interface McpServerInstance {
   tool(name: string, ...args: unknown[]): void;
 }
 
+/** Resolve the WebSocketServer constructor from the `ws` module, handling both CJS export shapes. */
+function getWebSocketServerConstructor(ws: typeof import('ws')): typeof import('ws').WebSocketServer {
+  const wsModule = ws as unknown as Record<string, unknown>;
+  return (wsModule['WebSocketServer'] ?? wsModule['Server']) as typeof import('ws').WebSocketServer;
+}
+
 /**
  * Create and connect an MCP server with the specified transport.
  *
@@ -73,8 +79,8 @@ export async function createMcpServer(options: McpServerOptions): Promise<McpSer
     case 'websocket': {
       const wsPort = options.wsPort ?? parseInt(process.env['WS_PORT'] ?? '3001', 10);
       const ws = require('ws') as typeof import('ws');
-      const WsServer = (ws as unknown as { WebSocketServer: typeof import('ws').WebSocketServer }).WebSocketServer
-        ?? (ws as unknown as { Server: typeof import('ws').WebSocketServer }).Server;
+
+      const WsServer = getWebSocketServerConstructor(ws);
 
       await new Promise<void>((resolve, reject) => {
         const wss = new WsServer({ port: wsPort });

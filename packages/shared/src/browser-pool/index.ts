@@ -144,28 +144,30 @@ export class BrowserPool {
     const createdAt = Date.now();
     const pool = this;
 
-    const browserContext: BrowserContext = {
-      context: playwrightCtx,
-      createdAt,
-      async release() {
-        pool.active.delete(playwrightCtx);
+    const makeRelease = (ctx: import('playwright').BrowserContext): BrowserContext['release'] =>
+      async function release() {
+        pool.active.delete(ctx);
         // Serve the next waiter if any
         const waiter = pool.waiters.shift();
         if (waiter) {
           // Reuse this context for the next waiter
-          pool.active.add(playwrightCtx);
-          const newCreatedAt = Date.now();
+          pool.active.add(ctx);
           const reusedContext: BrowserContext = {
-            context: playwrightCtx,
-            createdAt: newCreatedAt,
-            release: browserContext.release,
+            context: ctx,
+            createdAt: Date.now(),
+            release: makeRelease(ctx),
           };
           waiter(reusedContext);
         } else {
           // No waiters — close the context to free resources
-          await playwrightCtx.close().catch(() => {});
+          await ctx.close().catch(() => {});
         }
-      },
+      };
+
+    const browserContext: BrowserContext = {
+      context: playwrightCtx,
+      createdAt,
+      release: makeRelease(playwrightCtx),
     };
 
     return browserContext;
