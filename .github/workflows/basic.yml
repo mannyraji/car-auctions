@@ -61,4 +61,4 @@ jobs:
         run: npx eslint .
       - name: Check formatting
         if: steps.project-files.outputs.has_npm_lockfile == 'true' && steps.project-files.outputs.has_prettier_config == 'true'
-        run: npx prettier --check .
+        run: npm exec -- prettier --check .
