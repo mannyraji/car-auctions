@@ -1,36 +1,64 @@
-# This is a basic workflow to help you get started with Actions
-
 name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
-  push:
-    branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
-
-  # Allows you to run this workflow manually from the Actions tab
+    branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  ci:
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
+    strategy:
+      matrix:
+        node-version: [20]
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
-
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
-
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Detect project files
+        id: project-files
+        shell: bash
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          if [ -f package.json ] && { [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; }; then
+            echo "has_npm_lockfile=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_npm_lockfile=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Node.js checks because no root package.json and npm lockfile were found."
+          fi
+
+          if find . -maxdepth 2 \( -name 'tsconfig.json' -o -name 'tsconfig.*.json' \) | grep -q .; then
+            echo "has_tsconfig=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_tsconfig=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if find . -maxdepth 2 \( -name 'eslint.config.js' -o -name 'eslint.config.cjs' -o -name 'eslint.config.mjs' -o -name '.eslintrc' -o -name '.eslintrc.js' -o -name '.eslintrc.cjs' -o -name '.eslintrc.json' -o -name '.eslintrc.yaml' -o -name '.eslintrc.yml' \) | grep -q .; then
+            echo "has_eslint_config=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_eslint_config=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if find . -maxdepth 2 \( -name '.prettierrc' -o -name '.prettierrc.json' -o -name '.prettierrc.js' -o -name '.prettierrc.cjs' -o -name '.prettierrc.mjs' -o -name '.prettierrc.yaml' -o -name '.prettierrc.yml' -o -name 'prettier.config.js' -o -name 'prettier.config.cjs' -o -name 'prettier.config.mjs' \) | grep -q .; then
+            echo "has_prettier_config=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_prettier_config=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.project-files.outputs.has_npm_lockfile == 'true'
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - name: Install dependencies
+        if: steps.project-files.outputs.has_npm_lockfile == 'true'
+        run: npm ci
+      - name: Build TypeScript
+        if: steps.project-files.outputs.has_npm_lockfile == 'true' && steps.project-files.outputs.has_tsconfig == 'true'
+        run: npm run build --workspaces --if-present
+      - name: Run tests
+        if: steps.project-files.outputs.has_npm_lockfile == 'true'
+        run: npm run test --workspaces --if-present
+      - name: Lint
+        if: steps.project-files.outputs.has_npm_lockfile == 'true' && steps.project-files.outputs.has_eslint_config == 'true'
+        run: npx eslint .
+      - name: Check formatting
+        if: steps.project-files.outputs.has_npm_lockfile == 'true' && steps.project-files.outputs.has_prettier_config == 'true'
+        run: npx prettier --check .

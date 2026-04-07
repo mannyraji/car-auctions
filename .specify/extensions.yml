@@ -1,0 +1,44 @@
+# Extension hooks for speckit agents (speckit.tasks, speckit.implement)
+# Hooks run automatically (mandatory) or prompt the user (optional) at each phase.
+
+hooks:
+  # ── After task generation ──────────────────────────────────────────
+  after_tasks:
+    - extension: spec-trace
+      command: spec-trace
+      description: Trace tasks back to spec requirements for coverage validation
+      prompt: Run spec-trace on the generated tasks.md to verify all requirements from spec.md are covered
+      optional: true
+      enabled: true
+
+  # ── Before implementation ──────────────────────────────────────────
+  before_implement:
+    - extension: contract-check
+      command: contract-check
+      description: Validate API contracts are complete before implementation
+      prompt: Run contract-check to validate contracts in the spec directory are well-formed
+      optional: true
+      enabled: true
+
+  # ── After implementation ───────────────────────────────────────────
+  after_implement:
+    - extension: contract-check
+      command: contract-check
+      description: Validate implementation conforms to API contracts
+      prompt: Run contract-check to verify the implementation matches all API contracts
+      optional: false
+      enabled: true
+
+    - extension: spec-trace
+      command: spec-trace
+      description: Trace implementation back to requirements
+      prompt: Run spec-trace to verify all spec requirements have been implemented with proper traceability
+      optional: false
+      enabled: true
+
+    - extension: speckit.analyze
+      command: speckit.analyze
+      description: Run consistency analysis across the implementation
+      prompt: Run a project analysis for consistency
+      optional: true
+      enabled: true
