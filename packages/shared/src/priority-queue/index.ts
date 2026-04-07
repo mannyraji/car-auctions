@@ -65,13 +65,13 @@ export class PriorityQueue {
   /**
    * Enqueue a request. Returns a promise that resolves with the result.
    * `id` and `enqueuedAt` are auto-assigned.
+   *
+   * `critical` requests bypass the queue, rate limit, **and** pause state — they
+   * execute immediately even while the queue is stopped.
    */
   enqueue<T>(request: Omit<PriorityRequest<T>, 'id' | 'enqueuedAt'>): Promise<T> {
     if (this.isShutdown) {
       return Promise.reject(new Error('PriorityQueue has been shut down'));
-    }
-    if (this.isPaused) {
-      return Promise.reject(new Error('PriorityQueue has been stopped'));
     }
 
     return new Promise<T>((resolve, reject) => {
@@ -81,7 +81,7 @@ export class PriorityQueue {
         enqueuedAt: Date.now(),
       };
 
-      // Critical: bypass queue — execute immediately
+      // Critical: bypass queue, rate limit, AND pause state — execute immediately
       if (full.priority === 'critical') {
         this.activeCount++;
         full
@@ -94,6 +94,12 @@ export class PriorityQueue {
             this.activeCount--;
             reject(e);
           });
+        return;
+      }
+
+      // Non-critical requests are blocked while paused
+      if (this.isPaused) {
+        reject(new Error('PriorityQueue has been stopped'));
         return;
       }
 
@@ -125,10 +131,11 @@ export class PriorityQueue {
   /**
    * Pause processing and cancel all currently queued requests.
    *
-   * **Note:** pending (not yet executing) requests are immediately rejected
-   * with a `PriorityQueue has been stopped` error and are **not** executed.
-   * Already-running requests complete normally. Enqueueing while paused is
-   * rejected immediately. Call `start()` to resume processing new requests.
+   * **Note:** pending (not yet executing) non-critical requests are immediately
+   * rejected with a `PriorityQueue has been stopped` error and are **not**
+   * executed. Already-running requests complete normally. `critical` requests
+   * bypass the paused state and execute immediately regardless. Call `start()`
+   * to resume processing new requests.
    *
    * @example
    * queue.stop();

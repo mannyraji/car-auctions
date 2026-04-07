@@ -310,4 +310,16 @@ describe('PriorityQueue', () => {
 
     await queue.shutdown();
   });
+
+  it('critical enqueue executes even while paused', async () => {
+    const queue = new PriorityQueue({ rateLimit: { requestsPerSecond: 100 } });
+
+    queue.stop();
+
+    // critical requests bypass the paused state
+    const result = await queue.enqueue({ priority: 'critical', execute: async () => 99 });
+    expect(result).toBe(99);
+
+    await queue.shutdown();
+  });
 });
