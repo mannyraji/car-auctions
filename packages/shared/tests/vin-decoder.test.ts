@@ -209,13 +209,21 @@ describe('InMemoryVinCache', () => {
   it('size property returns current entry count', async () => {
     const cache = new InMemoryVinCache();
     expect(cache.size).toBe(0);
-    await cache.set(VALID_VIN, { vin: VALID_VIN, year: 2003 } as import('../src/types/index.js').VINDecodeResult, 60_000);
+    await cache.set(
+      VALID_VIN,
+      { vin: VALID_VIN, year: 2003 } as import('../src/types/index.js').VINDecodeResult,
+      60_000
+    );
     expect(cache.size).toBe(1);
   });
 
   it('clear() removes all entries', async () => {
     const cache = new InMemoryVinCache();
-    await cache.set(VALID_VIN, { vin: VALID_VIN, year: 2003 } as import('../src/types/index.js').VINDecodeResult, 60_000);
+    await cache.set(
+      VALID_VIN,
+      { vin: VALID_VIN, year: 2003 } as import('../src/types/index.js').VINDecodeResult,
+      60_000
+    );
     cache.clear();
     expect(cache.size).toBe(0);
     expect(await cache.get(VALID_VIN)).toBeNull();
@@ -404,7 +412,10 @@ describe('SqliteVinCache', () => {
 
   it('returns null after TTL expires', async () => {
     vi.useFakeTimers();
-    const result = { vin: VALID_VIN, year: 2003 } as import('../src/types/index.js').VINDecodeResult;
+    const result = {
+      vin: VALID_VIN,
+      year: 2003,
+    } as import('../src/types/index.js').VINDecodeResult;
     await cache.set(VALID_VIN, result, 1000);
 
     vi.advanceTimersByTime(2000);
