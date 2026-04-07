@@ -1,0 +1,37 @@
+{
+  "lotNumberStr": "12345678",
+  "mkn": "Honda",
+  "mmod": "Civic",
+  "lcy": 2019,
+  "dd": "Front End",
+  "sdd": "Minor Dents/Scratches",
+  "orr": 42500,
+  "odometerBrand": "ACTUAL",
+  "la": "Los Angeles - CA",
+  "dynamicBidAmount": 4500,
+  "bin": 7500,
+  "tims": {
+    "full": [
+      "https://cs.copart.com/v1/AUTH_svc.pdoc00001/LOT/2019/Honda_Civic_Front.jpg",
+      "https://cs.copart.com/v1/AUTH_svc.pdoc00001/LOT/2019/Honda_Civic_Side.jpg"
+    ]
+  },
+  "ad": "2024-06-15T14:00:00.000Z",
+  "hk": true,
+  "dr": false,
+  "ts": "CA",
+  "tt": "Salvage",
+  "vin": "2HGFC2F59KH123456",
+  "yr": 2019,
+  "clr": "Silver",
+  "eng": "1.5L I4 DOHC 16V",
+  "trans": "CVT",
+  "drv": "FWD",
+  "fuel": "Gasoline",
+  "ltrim": "Sport",
+  "bstyl": "Sedan",
+  "cyl": 4,
+  "est": 12500,
+  "seller": "State Farm",
+  "zip": "90001"
+}

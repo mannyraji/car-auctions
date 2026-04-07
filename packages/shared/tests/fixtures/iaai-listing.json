@@ -1,0 +1,38 @@
+{
+  "stockNumber": "87654321",
+  "year": 2019,
+  "makeName": "Honda",
+  "modelName": "Civic",
+  "primaryDamage": "Front End",
+  "secondaryDamage": "Minor Dents/Scratches",
+  "odometerReading": 42500,
+  "odometerUnit": "Miles",
+  "branch": "Los Angeles - CA",
+  "currentBid": 4500,
+  "buyNowPrice": 7500,
+  "saleDate": "2024-06-15T14:00:00.000Z",
+  "hasKeys": "YES",
+  "titleState": "CA",
+  "titleCode": "SV",
+  "images": [
+    {
+      "url": "https://img.iaai.com/images/2019/Honda_Civic_Front.jpg",
+      "seq": 1
+    },
+    {
+      "url": "https://img.iaai.com/images/2019/Honda_Civic_Side.jpg",
+      "seq": 2
+    }
+  ],
+  "vin": "2HGFC2F59KH123456",
+  "color": "Silver",
+  "engine": "1.5L I4 DOHC 16V",
+  "transmission": "CVT",
+  "driveType": "FWD",
+  "fuelType": "Gasoline",
+  "trim": "Sport",
+  "bodyStyle": "Sedan",
+  "cylinders": 4,
+  "retailValue": 12500,
+  "zipCode": "90001"
+}
