@@ -70,6 +70,9 @@ export class PriorityQueue {
     if (this.isShutdown) {
       return Promise.reject(new Error('PriorityQueue has been shut down'));
     }
+    if (this.isPaused) {
+      return Promise.reject(new Error('PriorityQueue has been stopped'));
+    }
 
     return new Promise<T>((resolve, reject) => {
       const full: PriorityRequest<T> = {
@@ -112,9 +115,9 @@ export class PriorityQueue {
    * Pause processing and cancel all currently queued requests.
    *
    * **Note:** pending (not yet executing) requests are immediately rejected
-   * with a `PriorityQueue has been shut down` error and are **not** executed.
-   * Already-running requests complete normally. Call `start()` to resume
-   * processing new requests.
+   * with a `PriorityQueue has been stopped` error and are **not** executed.
+   * Already-running requests complete normally. Enqueueing while paused is
+   * rejected immediately. Call `start()` to resume processing new requests.
    *
    * @example
    * queue.stop();
@@ -134,7 +137,7 @@ export class PriorityQueue {
     // Reject all pending entries
     for (const queue of this.queues.values()) {
       for (const entry of queue) {
-        entry.reject(new Error('PriorityQueue has been shut down'));
+        entry.reject(new Error('PriorityQueue has been stopped'));
       }
       queue.length = 0;
     }
@@ -279,7 +282,7 @@ export class PriorityQueue {
 
   /** Starvation prevention: force ≥1 low/background task per 60s */
   private runStarvationSlot(): void {
-    if (this.isShutdown) return;
+    if (this.isShutdown || this.isPaused) return;
 
     for (const level of ['low', 'background'] as PriorityLevel[]) {
       const queue = this.queues.get(level)!;

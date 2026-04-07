@@ -244,23 +244,33 @@ describe('PriorityQueue', () => {
 
     queue.stop();
 
-    await expect(p1).rejects.toThrow(/shut down/);
-    await expect(p2).rejects.toThrow(/shut down/);
+    await expect(p1).rejects.toThrow(/stopped/);
+    await expect(p2).rejects.toThrow(/stopped/);
   });
 
   it('start() re-enables processing after stop()', async () => {
     const queue = new PriorityQueue({ rateLimit: { requestsPerSecond: 100 } });
 
     queue.stop();
+    queue.start();
 
-    // Enqueue after stop — should process once started again
+    // Enqueue after start — should process normally
     const p = queue.enqueue({ priority: 'normal', execute: async () => 42 });
     await vi.advanceTimersByTimeAsync(10);
 
-    queue.start();
-    await vi.advanceTimersByTimeAsync(10);
-
     await expect(p).resolves.toBe(42);
+    await queue.shutdown();
+  });
+
+  it('enqueue rejects immediately while paused', async () => {
+    const queue = new PriorityQueue({ rateLimit: { requestsPerSecond: 100 } });
+
+    queue.stop();
+
+    await expect(
+      queue.enqueue({ priority: 'normal', execute: async () => 1 }),
+    ).rejects.toThrow(/stopped/);
+
     await queue.shutdown();
   });
 });
