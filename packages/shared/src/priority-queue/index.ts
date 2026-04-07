@@ -93,6 +93,36 @@ export class PriorityQueue {
   }
 
   /**
+   * Start the queue processing loop.
+   * The queue starts automatically on construction; this is a no-op provided
+   * for symmetry with `stop()` and contract compliance.
+   */
+  start(): void {
+    if (!this.isShutdown) {
+      this.scheduleNext();
+    }
+  }
+
+  /**
+   * Stop processing and drain all queued requests.
+   * Alias for `shutdown()` — provided for contract compliance.
+   *
+   * @example
+   * queue.stop();
+   */
+  stop(): void {
+    void this.shutdown();
+  }
+
+  /**
+   * Whether the queue is currently executing a request.
+   * Note: critical-bypass requests increment `activeCount` immediately.
+   */
+  get processing(): boolean {
+    return this.activeCount > 0;
+  }
+
+  /**
    * Drain all queues and stop processing.
    */
   async shutdown(): Promise<void> {

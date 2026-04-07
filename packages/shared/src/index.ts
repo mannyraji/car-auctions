@@ -1,7 +1,15 @@
 /**
  * @car-auctions/shared — Public API
  *
- * Re-exports all public types, error classes, and utilities.
+ * Shared types, error classes, and utilities for the Car Auctions MCP monorepo.
+ * Re-exports everything consumers need from a single entry point.
+ *
+ * @example
+ * ```typescript
+ * import type { AuctionListing, DealAnalysis } from '@car-auctions/shared';
+ * import { normalizeCopart, decodeVin, ScraperError } from '@car-auctions/shared';
+ * ```
+ *
  * @packageDocumentation
  */
 
