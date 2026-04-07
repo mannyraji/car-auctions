@@ -5,9 +5,12 @@
  * FifoVinCache IS exported for use in test files.
  */
 
+import { createRequire } from 'node:module';
 import type { VINDecodeResult } from '../types/index.js';
 import type { VinCache } from './index.js';
 import { CacheError } from '../errors.js';
+
+const require = createRequire(import.meta.url);
 
 // ============================================================
 // SqliteVinCache — production implementation
@@ -34,8 +37,7 @@ export class SqliteVinCache implements VinCache {
 
   constructor(dbPath = 'data/vin-cache.sqlite') {
     try {
-      // Using require() for CJS-only native module (better-sqlite3) in ESM context.
-      // This is intentional — better-sqlite3 does not have an ESM build.
+      // better-sqlite3 is a CJS-only native module; use createRequire for ESM compatibility.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const Database = require('better-sqlite3') as new (path: string) => any;
       this.db = new Database(dbPath);
