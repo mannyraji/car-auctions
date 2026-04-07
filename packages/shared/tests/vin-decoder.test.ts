@@ -370,10 +370,12 @@ describe('SqliteVinCache', () => {
     } catch {
       // already closed
     }
-    try {
-      fs.unlinkSync(dbPath);
-    } catch {
-      // file may not exist
+    for (const filePath of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+        // file may not exist
+      }
     }
   });
 
@@ -412,16 +414,19 @@ describe('SqliteVinCache', () => {
 
   it('returns null after TTL expires', async () => {
     vi.useFakeTimers();
-    const result = {
-      vin: VALID_VIN,
-      year: 2003,
-    } as import('../src/types/index.js').VINDecodeResult;
-    await cache.set(VALID_VIN, result, 1000);
+    try {
+      const result = {
+        vin: VALID_VIN,
+        year: 2003,
+      } as import('../src/types/index.js').VINDecodeResult;
+      await cache.set(VALID_VIN, result, 1000);
 
-    vi.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(2000);
 
-    expect(await cache.get(VALID_VIN)).toBeNull();
-    vi.useRealTimers();
+      expect(await cache.get(VALID_VIN)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('overwrites an existing entry on set', async () => {
