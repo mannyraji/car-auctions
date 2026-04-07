@@ -82,6 +82,7 @@ export {
 export {
   BrowserPool,
   type BrowserPoolOptions,
+  type BrowserContext,
 } from './browser-pool/index.js';
 
 // ─── Priority Queue ──────────────────────────────────────────
@@ -89,6 +90,7 @@ export {
   PriorityQueue,
   type PriorityLevel,
   type PriorityRequest,
+  type PriorityQueueOptions,
 } from './priority-queue/index.js';
 
 // ─── OpenTelemetry Tracing ───────────────────────────────────
@@ -160,11 +162,16 @@ interface McpServerOptions {
 ### `BrowserPool`
 
 ```typescript
+interface BrowserContext {
+  readonly context: PlaywrightBrowserContext;  // Underlying Playwright context
+  release(): Promise<void>;                     // Return context to pool (do not close manually)
+  readonly createdAt: number;                   // Context creation timestamp (ms)
+}
+
 class BrowserPool {
   constructor(options?: BrowserPoolOptions);
-  acquireContext(): Promise<BrowserContext>;  // Get a browser context (queues if at max)
-  releaseContext(context: BrowserContext): Promise<void>;  // Return context to pool
-  shutdown(): Promise<void>;  // Idempotent, reference-counted shutdown
+  acquire(): Promise<BrowserContext>;   // Get a wrapped context (queues if at max)
+  shutdown(): Promise<void>;            // Idempotent, reference-counted shutdown
 }
 
 interface BrowserPoolOptions {
@@ -177,24 +184,25 @@ interface BrowserPoolOptions {
 
 - **Behavior**: Single browser instance shared across contexts; stealth applied at browser level
 - **Concurrency**: Queues requests beyond `maxContexts`
+- **Release**: Call `browserContext.release()` (not a separate pool method) to return context
 - **Shutdown**: Idempotent; reference-counted; no orphaned processes
 
 ### `PriorityQueue`
 
 ```typescript
 class PriorityQueue {
-  constructor(options?: { rateLimit?: { requestsPerSecond?: number }; });
-  enqueue(request: PriorityRequest): void;
-  start(): void;
-  stop(): void;
+  constructor(options?: { rateLimit?: { requestsPerSecond?: number }; maxQueueDepth?: number; });
+  enqueue<T>(request: Omit<PriorityRequest<T>, 'id' | 'enqueuedAt'>): Promise<T>;
+  shutdown(): Promise<void>;
+  getDepth(): Record<PriorityLevel, number>;
   readonly pending: number;
-  readonly processing: boolean;
 }
 ```
 
 - **Rate limit**: Default 1 request per 3 seconds (token bucket)
-- **Critical bypass**: `critical` requests skip queue and rate limit
+- **Critical bypass**: `critical` requests bypass queue ordering AND rate limit unconditionally
 - **Starvation prevention**: `low`/`background` guaranteed ≥1 slot per 60s
+- **`id` and `enqueuedAt`**: Auto-assigned by the queue; callers must not supply them
 
 ### `initTracing(options: { serviceName: string }): void`
 

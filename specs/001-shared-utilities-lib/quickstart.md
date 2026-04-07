@@ -77,14 +77,14 @@ server.tool('copart_search', schema, handler);
 import { BrowserPool } from '@car-auctions/shared';
 
 const pool = new BrowserPool({ maxContexts: 3 });
-const context = await pool.acquireContext();
+const browserContext = await pool.acquire();
 
 try {
-  const page = await context.newPage();
+  const page = await browserContext.context.newPage();
   await page.goto('https://www.copart.com', { timeout: 30_000 });
   // ... scrape
 } finally {
-  await pool.releaseContext(context);
+  await browserContext.release();
 }
 
 // On shutdown
@@ -97,23 +97,21 @@ await pool.shutdown();
 import { PriorityQueue } from '@car-auctions/shared';
 
 const queue = new PriorityQueue();
-queue.start();
 
-// Critical request — bypasses rate limit, processed in <100ms
-queue.enqueue({
-  id: 'watch-123',
+// Critical request — bypasses queue ordering AND rate limit, processed in <100ms
+await queue.enqueue({
   priority: 'critical',
-  enqueuedAt: Date.now(),
   execute: async () => { /* urgent watchlist refresh */ },
 });
 
 // Background request — up to 30s wait
-queue.enqueue({
-  id: 'warmup-456',
+await queue.enqueue({
   priority: 'background',
-  enqueuedAt: Date.now(),
   execute: async () => { /* cache warm-up */ },
 });
+
+// Graceful shutdown
+await queue.shutdown();
 ```
 
 ### Initialize tracing
