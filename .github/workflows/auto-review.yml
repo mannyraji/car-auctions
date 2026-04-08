@@ -16,7 +16,6 @@ jobs:
   code-quality:
     name: Code Quality
     runs-on: ubuntu-latest
-    if: github.event.requested_reviewer.login == vars.AUTO_REVIEWER
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,7 +38,6 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
-    if: github.event.requested_reviewer.login == vars.AUTO_REVIEWER
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -62,7 +60,6 @@ jobs:
   test-coverage:
     name: Test Coverage
     runs-on: ubuntu-latest
-    if: github.event.requested_reviewer.login == vars.AUTO_REVIEWER
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -89,10 +86,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [code-quality, security, test-coverage]
     if: >-
+      always() &&
       needs.code-quality.result == 'success' &&
       needs.security.result == 'success' &&
-      needs.test-coverage.result == 'success' &&
-      github.event.requested_reviewer.login == vars.AUTO_REVIEWER
+      needs.test-coverage.result == 'success'
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
