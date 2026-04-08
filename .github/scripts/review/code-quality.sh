@@ -57,16 +57,13 @@ done
 
 # --- ESLint ---
 echo "Running ESLint on changed files ..." >&2
-eslint_files=""
+eslint_files=()
 while IFS= read -r file; do
-  if [[ -f "$file" ]]; then
-    eslint_files+=" $file"
-  fi
+  [[ -f "$file" ]] && eslint_files+=("$file")
 done <<< "$changed_files"
 
-if [[ -n "$eslint_files" ]]; then
-  # shellcheck disable=SC2086
-  eslint_output=$(npx eslint --format json $eslint_files 2>&1 || true)
+if [[ ${#eslint_files[@]} -gt 0 ]]; then
+  eslint_output=$(npx eslint --format json "${eslint_files[@]}" 2>&1 || true)
 
   if [[ -n "$eslint_output" ]]; then
     # Parse ESLint JSON output
