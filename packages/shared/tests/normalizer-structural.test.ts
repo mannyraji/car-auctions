@@ -302,17 +302,23 @@ describe('IAAI title code edge cases', () => {
 
   it('unknown code logs warning and returns "Unknown"', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const listing = normalizeIaai({ titleCode: 'ZZ' } as IaaiRawListing);
-    expect(listing.title_type).toBe('Unknown');
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    warnSpy.mockRestore();
+    try {
+      const listing = normalizeIaai({ titleCode: 'ZZ' } as IaaiRawListing);
+      expect(listing.title_type).toBe('Unknown');
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('empty string titleCode logs warning and returns "Unknown"', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const listing = normalizeIaai({ titleCode: '' } as IaaiRawListing);
-    expect(listing.title_type).toBe('Unknown');
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    warnSpy.mockRestore();
+    try {
+      const listing = normalizeIaai({ titleCode: '' } as IaaiRawListing);
+      expect(listing.title_type).toBe('Unknown');
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
