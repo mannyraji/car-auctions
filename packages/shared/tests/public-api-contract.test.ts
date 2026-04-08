@@ -26,10 +26,7 @@ import * as shared from '../src/index.js';
  */
 function parseContractRuntimeExports(): string[] {
   const contractPath = fileURLToPath(
-    new URL(
-      '../../../specs/001-shared-utilities-lib/contracts/public-api.md',
-      import.meta.url,
-    ),
+    new URL('../../../specs/001-shared-utilities-lib/contracts/public-api.md', import.meta.url)
   );
   const content = readFileSync(contractPath, 'utf-8');
 
