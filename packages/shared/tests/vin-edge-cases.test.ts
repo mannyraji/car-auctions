@@ -5,7 +5,7 @@
  * - Pre-1981 VINs (shorter than 17 chars) are intentionally rejected
  * - Check digit (position 9) is NOT validated — only format rules
  * - Case-insensitive: lowercase VINs pass validation
- * - Boundary inputs: whitespace, unicode, numeric-only, exactly 17 I/O/Q chars
+ * - Boundary inputs: whitespace, unicode, numeric-only
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { validateVin } from '../src/vin-decoder/validator.js';
