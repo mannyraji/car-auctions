@@ -211,6 +211,22 @@ export class CopartClient {
       const rawLot = parseListing(await this.extractPageJson(p));
       const urls = rawLot ? parseImageUrls(rawLot) : [];
       return { data: urls, cached: false, stale: false, cachedAt: null };
+    } catch (err) {
+      if (err instanceof CaptchaError || err instanceof RateLimitError) throw err;
+      const stale = await this.cache.getListing(lotNumber, true);
+      if (stale?.data.image_urls?.length) {
+        return {
+          data: stale.data.image_urls,
+          cached: true,
+          stale: true,
+          cachedAt: stale.fetched_at,
+        };
+      }
+      throw new ScraperError(
+        err instanceof Error ? err.message : 'Unknown scraper error',
+        'SCRAPER_ERROR',
+        false
+      );
     } finally {
       if (page) await page.close().catch(() => {});
     }
