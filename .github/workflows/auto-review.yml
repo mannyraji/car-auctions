@@ -1,0 +1,108 @@
+name: Auto PR Review
+
+on:
+  pull_request:
+    types: [review_requested]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    if: github.event.requested_reviewer.login == vars.AUTO_REVIEWER
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Run code quality checks
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          OUTPUT_DIR: ${{ runner.temp }}
+        run: bash .github/scripts/review/code-quality.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: code-quality-findings
+          path: ${{ runner.temp }}/code-quality-findings.json
+          retention-days: 1
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    if: github.event.requested_reviewer.login == vars.AUTO_REVIEWER
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Run security scan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          OUTPUT_DIR: ${{ runner.temp }}
+        run: bash .github/scripts/review/security-scan.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: security-findings
+          path: ${{ runner.temp }}/security-findings.json
+          retention-days: 1
+
+  test-coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    if: github.event.requested_reviewer.login == vars.AUTO_REVIEWER
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build workspaces
+        run: npm run build --workspaces --if-present
+      - name: Run test coverage checks
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          OUTPUT_DIR: ${{ runner.temp }}
+        run: bash .github/scripts/review/test-coverage.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-findings
+          path: ${{ runner.temp }}/test-findings.json
+          retention-days: 1
+
+  submit-review:
+    name: Submit Review
+    runs-on: ubuntu-latest
+    needs: [code-quality, security, test-coverage]
+    if: >-
+      needs.code-quality.result == 'success' &&
+      needs.security.result == 'success' &&
+      needs.test-coverage.result == 'success' &&
+      github.event.requested_reviewer.login == vars.AUTO_REVIEWER
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/artifacts
+          merge-multiple: true
+      - name: Submit consolidated review
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ARTIFACTS_DIR: ${{ runner.temp }}/artifacts
+        run: bash .github/scripts/review/submit-review.sh
