@@ -4,7 +4,10 @@
  * Opt-in: configures OTLP HTTP export when OTEL_EXPORTER_OTLP_ENDPOINT is set.
  * No-op when the env var is absent — zero overhead.
  */
+import { createRequire } from 'module';
 import type { SpanAttributes } from '../types/index.js';
+
+const require = createRequire(import.meta.url);
 
 export type { SpanAttributes };
 
