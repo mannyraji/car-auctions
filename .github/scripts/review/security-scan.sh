@@ -49,6 +49,7 @@ fi
 # --- Hardcoded secrets in changed files ---
 echo "Scanning for hardcoded secrets ..." >&2
 changed_files=$("$SCRIPT_DIR/get-changed-files.sh" --filter-ext ts,js,mjs,json)
+changed_ts=$(echo "$changed_files" | grep -E '\.(ts|js)$' || true)
 
 # Patterns that indicate hardcoded secrets (value after = is a string literal, not env ref)
 secret_patterns=(
@@ -89,7 +90,6 @@ done <<< "$changed_files"
 
 # --- String-concatenated SQL ---
 echo "Scanning for SQL injection risks ..." >&2
-changed_ts=$("$SCRIPT_DIR/get-changed-files.sh" --filter-ext ts,js)
 
 while IFS= read -r file; do
   [[ -z "$file" || ! -f "$file" ]] && continue

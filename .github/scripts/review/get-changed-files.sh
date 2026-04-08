@@ -6,7 +6,7 @@
 #
 # Outputs newline-separated file paths to stdout.
 
-set -euo pipefail
+set -uo pipefail
 
 : "${PR_NUMBER:?PR_NUMBER environment variable is required}"
 

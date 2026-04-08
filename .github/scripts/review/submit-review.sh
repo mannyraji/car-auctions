@@ -39,10 +39,13 @@ if [[ "$artifact_count" -eq 0 ]]; then
 fi
 
 # --- Count by severity ---
-critical=$(echo "$all_findings" | jq '[.[] | select(.severity == "critical")] | length')
-high=$(echo "$all_findings" | jq '[.[] | select(.severity == "high")] | length')
-medium=$(echo "$all_findings" | jq '[.[] | select(.severity == "medium")] | length')
-low=$(echo "$all_findings" | jq '[.[] | select(.severity == "low")] | length')
+read -r critical high medium low <<< "$(echo "$all_findings" | jq -r '
+  [
+    [.[] | select(.severity == "critical")] | length,
+    [.[] | select(.severity == "high")] | length,
+    [.[] | select(.severity == "medium")] | length,
+    [.[] | select(.severity == "low")] | length
+  ] | join(" ")')"
 
 # --- Determine review event ---
 if [[ "$critical" -gt 0 || "$high" -gt 0 ]]; then
@@ -70,25 +73,24 @@ else
   [[ "$low" -gt 0 ]] && body+="| :white_circle: Low | $low |\n"
   body+="\n"
 
-  # Group and format findings by severity (critical first)
-  for sev in critical high medium low; do
-    sev_findings=$(echo "$all_findings" | jq -c "[.[] | select(.severity == \"$sev\")]")
-    sev_count=$(echo "$sev_findings" | jq 'length')
-    [[ "$sev_count" -eq 0 ]] && continue
-
-    case "$sev" in
-      critical) icon=":red_circle:"; label="Critical" ;;
-      high)     icon=":orange_circle:"; label="High" ;;
-      medium)   icon=":yellow_circle:"; label="Medium" ;;
-      low)      icon=":white_circle:"; label="Low" ;;
-    esac
-
-    body+="\n### $icon $label ($sev_count)\n\n"
-    body+="| File | Line | Source | Message |\n|------|------|--------|---------|\n"
-
-    rows=$(echo "$sev_findings" | jq -r '.[] | "| `\(.file)` | \(.line) | \(.source) | \(.message) |"')
-    body+="$rows\n"
-  done
+  # Group and format findings by severity (critical first) — single jq pass
+  grouped=$(echo "$all_findings" | jq -r '
+    group_by(.severity) | map({key: .[0].severity, items: .}) |
+    sort_by(if .key == "critical" then 0 elif .key == "high" then 1
+            elif .key == "medium" then 2 else 3 end) | .[] |
+    {sev: .key, count: (.items | length),
+     icon: (if .key == "critical" then ":red_circle:"
+            elif .key == "high" then ":orange_circle:"
+            elif .key == "medium" then ":yellow_circle:"
+            else ":white_circle:" end),
+     label: (if .key == "critical" then "Critical"
+             elif .key == "high" then "High"
+             elif .key == "medium" then "Medium"
+             else "Low" end),
+     rows: [.items[] | "| `\(.file)` | \(.line) | \(.source) | \(.message) |"] | join("\n")} |
+    "\n### \(.icon) \(.label) (\(.count))\n\n| File | Line | Source | Message |\n|------|------|--------|---------|\n\(.rows)"
+  ')
+  body+="$grouped\n"
 fi
 
 body+="\n---\n*Automated review by CI pipeline*\n"
