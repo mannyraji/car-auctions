@@ -1,9 +1,11 @@
 /**
  * Public API contract test
  *
- * Verifies every export listed in contracts/public-api.md is actually
- * re-exported from the barrel (src/index.ts). Catches regressions where
- * downstream MCP server packages would break due to missing exports.
+ * Verifies a representative subset of documented public API exports are
+ * re-exported from the barrel (src/index.ts) and remain usable by
+ * downstream MCP server packages. This covers key runtime exports,
+ * selected type exports via compile-time usage, and the absence of a
+ * default export.
  */
 import { describe, it, expect } from 'vitest';
 import * as shared from '../src/index.js';
