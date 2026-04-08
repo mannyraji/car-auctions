@@ -40,13 +40,13 @@ function parseContractRuntimeExports(): string[] {
   }
   const code = codeBlockMatch[1];
 
-  // Remove `export type { ... }` blocks entirely — [^}] matches newlines
-  const withoutTypeBlocks = code.replace(/export type \{[^}]*\}/g, '');
+  // Remove `export type { ... }` blocks entirely — use `s` flag so `.` / [^}] matches newlines
+  const withoutTypeBlocks = code.replace(/export type \{[^}]*\}/gs, '');
 
   const runtimeExports: string[] = [];
 
-  // Collect names from every remaining `export { ... }` block
-  const exportBlockRegex = /export \{([^}]+)\}/g;
+  // Collect names from every remaining `export { ... }` block (s flag for multiline)
+  const exportBlockRegex = /export \{([^}]+)\}/gs;
   let blockMatch: RegExpExecArray | null;
   while ((blockMatch = exportBlockRegex.exec(withoutTypeBlocks)) !== null) {
     const blockContent = blockMatch[1];
@@ -163,7 +163,7 @@ describe('Public API — every runtime export in public-api.md is present in the
   });
 
   it.each(contractExports)('"%s" is exported from src/index.ts', (name) => {
-    expect(Object.prototype.hasOwnProperty.call(shared, name)).toBe(true);
+    expect(shared).toHaveProperty(name);
   });
 });
 
