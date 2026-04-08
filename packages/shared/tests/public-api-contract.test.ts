@@ -1,12 +1,64 @@
 /**
  * Public API contract test
  *
- * Verifies every export listed in contracts/public-api.md is actually
- * re-exported from the barrel (src/index.ts). Catches regressions where
- * downstream MCP server packages would break due to missing exports.
+ * Parses the runtime (non-type) exports declared in
+ * specs/001-shared-utilities-lib/contracts/public-api.md and verifies that
+ * every one of them is actually re-exported from the barrel (src/index.ts).
+ * Catches regressions where downstream MCP server packages would break due
+ * to missing exports.
+ *
+ * Type exports are verified at compile time only (they are erased at runtime
+ * and cannot be checked dynamically); see the "type exports compile" suite.
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import * as shared from '../src/index.js';
+
+/**
+ * Parse the runtime (non-type) export names from the barrel export code block
+ * in the contract markdown file.
+ *
+ * Strategy:
+ *   1. Extract the first ```typescript … ``` code block.
+ *   2. Strip `export type { … }` blocks (all type-only exports).
+ *   3. From remaining `export { … }` blocks, skip items prefixed `type `.
+ */
+function parseContractRuntimeExports(): string[] {
+  const contractPath = fileURLToPath(
+    new URL(
+      '../../../specs/001-shared-utilities-lib/contracts/public-api.md',
+      import.meta.url,
+    ),
+  );
+  const content = readFileSync(contractPath, 'utf-8');
+
+  // Extract the typescript code block
+  const codeBlockMatch = content.match(/```typescript\n([\s\S]*?)```/);
+  if (!codeBlockMatch) {
+    throw new Error('No typescript code block found in public-api.md');
+  }
+  const code = codeBlockMatch[1];
+
+  // Remove `export type { ... }` blocks entirely — [^}] matches newlines
+  const withoutTypeBlocks = code.replace(/export type \{[^}]*\}/g, '');
+
+  const runtimeExports: string[] = [];
+
+  // Collect names from every remaining `export { ... }` block
+  const exportBlockRegex = /export \{([^}]+)\}/g;
+  let blockMatch: RegExpExecArray | null;
+  while ((blockMatch = exportBlockRegex.exec(withoutTypeBlocks)) !== null) {
+    const blockContent = blockMatch[1];
+    blockContent
+      .split(/[\n,]/)
+      .map((s) => s.replace(/\/\/.*$/, '').trim()) // strip inline comments
+      .filter((s) => s && !s.startsWith('type ')) // skip `type Foo` re-exports
+      .forEach((name) => runtimeExports.push(name));
+  }
+
+  return runtimeExports;
+}
 
 // ─── Type exports (verified structurally via runtime artefacts) ──────────────
 
@@ -101,44 +153,17 @@ describe('Public API — type exports compile', () => {
   });
 });
 
-// ─── Runtime exports ─────────────────────────────────────────────────────────
+// ─── Contract-driven runtime export checks ───────────────────────────────────
 
-describe('Public API — runtime value exports exist', () => {
-  it('exports error classes', () => {
-    expect(shared.ScraperError).toBeTypeOf('function');
-    expect(shared.CaptchaError).toBeTypeOf('function');
-    expect(shared.RateLimitError).toBeTypeOf('function');
-    expect(shared.CacheError).toBeTypeOf('function');
-    expect(shared.AnalysisError).toBeTypeOf('function');
+describe('Public API — every runtime export in public-api.md is present in the barrel', () => {
+  const contractExports = parseContractRuntimeExports();
+
+  it('contract file lists at least one runtime export', () => {
+    expect(contractExports.length).toBeGreaterThan(0);
   });
 
-  it('exports auction normalizers', () => {
-    expect(shared.normalizeCopart).toBeTypeOf('function');
-    expect(shared.normalizeIaai).toBeTypeOf('function');
-  });
-
-  it('exports VIN decoder functions and cache implementations', () => {
-    expect(shared.decodeVin).toBeTypeOf('function');
-    expect(shared.validateVin).toBeTypeOf('function');
-    expect(shared.SqliteVinCache).toBeTypeOf('function');
-    expect(shared.InMemoryVinCache).toBeTypeOf('function');
-  });
-
-  it('exports MCP server helper', () => {
-    expect(shared.createMcpServer).toBeTypeOf('function');
-  });
-
-  it('exports BrowserPool class', () => {
-    expect(shared.BrowserPool).toBeTypeOf('function');
-  });
-
-  it('exports PriorityQueue class', () => {
-    expect(shared.PriorityQueue).toBeTypeOf('function');
-  });
-
-  it('exports tracing utilities', () => {
-    expect(shared.initTracing).toBeTypeOf('function');
-    expect(shared.withSpan).toBeTypeOf('function');
+  it.each(contractExports)('"%s" is exported from src/index.ts', (name) => {
+    expect(Object.prototype.hasOwnProperty.call(shared, name)).toBe(true);
   });
 });
 
