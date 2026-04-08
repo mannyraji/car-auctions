@@ -197,8 +197,7 @@ describe('InMemoryVinCache', () => {
 
   it('evicts oldest entry when max capacity reached', async () => {
     const cache = new InMemoryVinCache(2);
-    const makeResult = (vin: string) =>
-      ({ vin, year: 2020 }) as VINDecodeResult;
+    const makeResult = (vin: string) => ({ vin, year: 2020 }) as VINDecodeResult;
 
     await cache.set('VIN00000000000001A', makeResult('VIN00000000000001A'), 60_000);
     await cache.set('VIN00000000000002A', makeResult('VIN00000000000002A'), 60_000);
@@ -213,21 +212,13 @@ describe('InMemoryVinCache', () => {
   it('size property returns current entry count', async () => {
     const cache = new InMemoryVinCache();
     expect(cache.size).toBe(0);
-    await cache.set(
-      VALID_VIN,
-      { vin: VALID_VIN, year: 2003 } as VINDecodeResult,
-      60_000
-    );
+    await cache.set(VALID_VIN, { vin: VALID_VIN, year: 2003 } as VINDecodeResult, 60_000);
     expect(cache.size).toBe(1);
   });
 
   it('clear() removes all entries', async () => {
     const cache = new InMemoryVinCache();
-    await cache.set(
-      VALID_VIN,
-      { vin: VALID_VIN, year: 2003 } as VINDecodeResult,
-      60_000
-    );
+    await cache.set(VALID_VIN, { vin: VALID_VIN, year: 2003 } as VINDecodeResult, 60_000);
     cache.clear();
     expect(cache.size).toBe(0);
     expect(await cache.get(VALID_VIN)).toBeNull();
