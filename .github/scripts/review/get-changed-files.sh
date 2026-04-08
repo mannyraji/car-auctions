@@ -26,7 +26,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Get changed files from the PR diff
-changed_files=$(gh pr diff "$PR_NUMBER" --name-only 2>/dev/null || true)
+changed_files=$(gh pr diff "$PR_NUMBER" --name-only 2>&1)
+diff_exit=$?
+if [[ $diff_exit -ne 0 ]]; then
+  echo "WARNING: gh pr diff failed (exit $diff_exit): $changed_files" >&2
+  changed_files=""
+fi
 
 if [[ -z "$changed_files" ]]; then
   echo "No changed files found for PR #${PR_NUMBER}" >&2

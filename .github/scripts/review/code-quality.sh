@@ -66,11 +66,11 @@ done <<< "$changed_files"
 
 if [[ -n "$eslint_files" ]]; then
   # shellcheck disable=SC2086
-  eslint_output=$(npx eslint --format json $eslint_files 2>/dev/null || true)
+  eslint_output=$(npx eslint --format json $eslint_files 2>&1 || true)
 
   if [[ -n "$eslint_output" ]]; then
     # Parse ESLint JSON output
-    parsed=$(echo "$eslint_output" | jq -c '
+    if ! parsed=$(echo "$eslint_output" | jq -c '
       [.[] | .filePath as $fp | .messages[] |
         {
           file: $fp,
@@ -79,7 +79,10 @@ if [[ -n "$eslint_files" ]]; then
           message: (.ruleId // "parse-error") + ": " + .message,
           source: "eslint"
         }
-      ]' 2>/dev/null || echo '[]')
+      ]' 2>&1); then
+      echo "WARNING: Failed to parse ESLint JSON output: $parsed" >&2
+      parsed='[]'
+    fi
     findings=$(echo "$findings $parsed" | jq -s '.[0] + .[1]')
   fi
 fi

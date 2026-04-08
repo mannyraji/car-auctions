@@ -21,7 +21,10 @@ DRY_RUN="${DRY_RUN:-false}"
 all_findings='[]'
 for f in "$ARTIFACTS_DIR"/*-findings.json; do
   [[ -f "$f" ]] || continue
-  content=$(jq -c '.' "$f" 2>/dev/null || echo '[]')
+  if ! content=$(jq -c '.' "$f" 2>&1); then
+    echo "WARNING: Failed to parse $f: $content" >&2
+    content='[]'
+  fi
   all_findings=$(echo "$all_findings $content" | jq -s '.[0] + .[1]')
 done
 
@@ -32,21 +35,7 @@ echo "Collected $total total finding(s) from $artifact_count artifact file(s)." 
 # If no artifact files were found at all, something went wrong — don't auto-approve
 if [[ "$artifact_count" -eq 0 ]]; then
   echo "ERROR: No findings artifacts found in $ARTIFACTS_DIR. All upstream jobs may have failed." >&2
-  body="## Automated Review Summary\n\n"
-  body+=":warning: **No review artifacts were produced.** All upstream review jobs may have failed.\n"
-  body+="Please check the workflow run for errors before merging.\n"
-  body+="\n---\n*Automated review by CI pipeline*\n"
-  review_body=$(printf '%b' "$body")
-  if [[ "$DRY_RUN" == "true" ]]; then
-    printf '%b' "$body"
-    echo "Event: COMMENT"
-    exit 0
-  fi
-  if [[ -z "${REPO:-}" ]]; then
-    REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "")
-  fi
-  gh pr review "$PR_NUMBER" --comment --body "$review_body"
-  exit 0
+  exit 1
 fi
 
 # --- Count by severity ---
