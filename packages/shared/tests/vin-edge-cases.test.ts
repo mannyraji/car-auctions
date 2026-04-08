@@ -104,11 +104,15 @@ describe('validateVin — boundary inputs', () => {
     expect(result.valid).toBe(false);
   });
 
-  it('rejects VIN with leading/trailing spaces', () => {
-    const result = validateVin(' 1HGCM82633A00435');
+  it('rejects VIN with a leading space', () => {
+    const result = validateVin(' 1HGCM82633A004352');
     expect(result.valid).toBe(false);
   });
 
+  it('rejects VIN with a trailing space', () => {
+    const result = validateVin('1HGCM82633A004352 ');
+    expect(result.valid).toBe(false);
+  });
   it('rejects VIN with embedded spaces', () => {
     const result = validateVin('1HGCM826 3A004352');
     expect(result.valid).toBe(false);
