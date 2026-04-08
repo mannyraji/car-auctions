@@ -408,6 +408,7 @@ describe('SqliteVinCache', () => {
   });
 
   it('returns null after TTL expires', async () => {
+    // Fake timers control Date.now(), which SqliteVinCache uses for TTL expiry checks
     vi.useFakeTimers();
     try {
       const result = {

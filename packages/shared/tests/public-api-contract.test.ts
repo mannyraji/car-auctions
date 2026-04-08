@@ -16,7 +16,7 @@ describe('Public API — type exports compile', () => {
   // fail to compile this test file.
 
   it('AuctionListing interface is usable', () => {
-    const listing: import('../src/types/index.js').AuctionListing = {
+    const listing: import('../src/index.js').AuctionListing = {
       source: 'copart',
       lot_number: '1',
       vin: '1HGCM82633A004352',
@@ -56,7 +56,7 @@ describe('Public API — type exports compile', () => {
   });
 
   it('ToolResponse envelope is usable', () => {
-    const resp: import('../src/types/index.js').ToolResponse<string> = {
+    const resp: import('../src/index.js').ToolResponse<string> = {
       success: true,
       data: 'ok',
       error: null,
@@ -69,7 +69,7 @@ describe('Public API — type exports compile', () => {
   });
 
   it('RiskFlag interface is usable', () => {
-    const flag: import('../src/types/index.js').RiskFlag = {
+    const flag: import('../src/index.js').RiskFlag = {
       type: 'title_wash',
       severity: 'critical',
       detail: 'Title history mismatch',
@@ -79,7 +79,7 @@ describe('Public API — type exports compile', () => {
   });
 
   it('VINDecodeResult interface is usable', () => {
-    const result: import('../src/types/index.js').VINDecodeResult = {
+    const result: import('../src/index.js').VINDecodeResult = {
       vin: '1HGCM82633A004352',
       year: 2003,
       make: 'HONDA',
