@@ -1,0 +1,33 @@
+{
+  "data": {
+    "lotNumberStr": "12345678",
+    "mkn": "Toyota",
+    "mdn": "Camry",
+    "lcy": 2019,
+    "dd": "Front End",
+    "sdd": "Minor Dents/Scratches",
+    "fv": "4T1B11HK3KU123456",
+    "ld": "Houston, TX",
+    "tmtp": "SV - State of TX",
+    "orr": 45231,
+    "clr": "Silver",
+    "egn": "2.5L 4 Cylinder",
+    "tsmn": "Automatic",
+    "htsmn": "Yes",
+    "bn": 15000,
+    "sd": "2024-01-15",
+    "ss": "On Minimum Bid",
+    "fb": null,
+    "lat": 29.7604,
+    "lng": -95.3698,
+    "dynamicLotDetails": { "currentBid": 3200 },
+    "imgUrl": "https://cs.copart.com/v1/AUTH_svc/12345678_ful.jpg",
+    "tims": {
+      "1": "https://cs.copart.com/v1/AUTH_svc/12345678_ful.jpg",
+      "2": "https://cs.copart.com/v1/AUTH_svc/12345678_2.jpg",
+      "3": "https://cs.copart.com/v1/AUTH_svc/12345678_3.jpg"
+    },
+    "du": "/lot/12345678",
+    "slr": "GEICO"
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "data": {
+    "results": {
+      "content": [
+        {
+          "lotNumberStr": "12345678",
+          "mkn": "Toyota",
+          "mdn": "Camry",
+          "lcy": 2019,
+          "dd": "Front End",
+          "sdd": "Minor Dents/Scratches",
+          "fv": "4T1B11HK3KU123456",
+          "ld": "Houston, TX",
+          "tmtp": "SV - State of TX",
+          "orr": 45231,
+          "clr": "Silver",
+          "egn": "2.5L 4 Cylinder",
+          "tsmn": "Automatic",
+          "htsmn": "Yes",
+          "bn": 15000,
+          "sd": "2024-01-15",
+          "ss": "On Minimum Bid",
+          "dynamicLotDetails": { "currentBid": 3200 },
+          "imgUrl": "https://cs.copart.com/v1/AUTH_svc/12345678_ful.jpg",
+          "tims": {
+            "1": "https://cs.copart.com/v1/AUTH_svc/12345678_ful.jpg",
+            "2": "https://cs.copart.com/v1/AUTH_svc/12345678_2.jpg"
+          },
+          "du": "/lot/12345678",
+          "slr": "GEICO"
+        },
+        {
+          "lotNumberStr": "87654321",
+          "mkn": "Honda",
+          "mdn": "Accord",
+          "lcy": 2020,
+          "dd": "Rear End",
+          "fv": "1HGCV1F34LA654321",
+          "ld": "Dallas, TX",
+          "tmtp": "SC - State Certificate",
+          "orr": 32100,
+          "clr": "Blue",
+          "egn": "1.5L Turbo 4 Cylinder",
+          "tsmn": "CVT",
+          "htsmn": "No",
+          "sd": "2024-01-16",
+          "ss": "On Minimum Bid",
+          "dynamicLotDetails": { "currentBid": 5100 },
+          "imgUrl": "https://cs.copart.com/v1/AUTH_svc/87654321_ful.jpg",
+          "du": "/lot/87654321",
+          "slr": "State Farm"
+        }
+      ],
+      "totalElements": 2,
+      "number": 0,
+      "size": 20
+    }
+  }
+}
