@@ -56,20 +56,24 @@ for ws in "${!workspaces[@]}"; do
     continue
   fi
 
-  # Run vitest with JSON reporter
-  test_output=$(cd "$ws" && npx vitest run --reporter=json 2>&1 || true)
+  # Run vitest with JSON reporter to a temp file for reliable parsing
+  json_file=$(mktemp)
+  test_output=$(cd "$ws" && npx vitest run --reporter=json --outputFile="$json_file" 2>&1 || true)
 
-  # Try to parse JSON output (vitest outputs JSON to stdout when --reporter=json)
-  json_part=$(echo "$test_output" | sed -n '/^{/,/^}/p' | head -500)
+  json_part=""
+  if [[ -s "$json_file" ]]; then
+    json_part=$(cat "$json_file")
+  fi
+  rm -f "$json_file"
 
   if [[ -n "$json_part" ]]; then
     # Extract failed tests
     failed=$(echo "$json_part" | jq -c '
-      [.testResults // [] | .[] |
+      [.testResults // [] | .[] | .name as $fp |
         .assertionResults // [] | .[] |
         select(.status == "failed") |
         {
-          file: .ancestorTitles[0],
+          file: $fp,
           line: 0,
           severity: "critical",
           message: "Test failed: " + .fullName + " — " + (.failureMessages[0] // "unknown error" | split("\n")[0]),

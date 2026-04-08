@@ -16,7 +16,14 @@ findings='[]'
 
 # --- npm audit ---
 echo "Running npm audit ..." >&2
-audit_output=$(npm audit --json 2>/dev/null || true)
+audit_output=$(npm audit --json 2>&1)
+audit_exit=$?
+
+if [[ $audit_exit -ne 0 ]] && ! echo "$audit_output" | jq -e '.metadata' &>/dev/null; then
+  echo "WARNING: npm audit failed (exit $audit_exit)" >&2
+  findings=$(echo "$findings" | jq -c \
+    '. + [{"file":"package.json","line":0,"severity":"high","message":"npm audit failed to run — possible network or lockfile issue","source":"npm-audit"}]')
+fi
 
 if [[ -n "$audit_output" ]]; then
   vuln_count=$(echo "$audit_output" | jq '.metadata.vulnerabilities // {} | to_entries | map(select(.key != "info" and .key != "low" and .value > 0)) | length' 2>/dev/null || echo 0)
