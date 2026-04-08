@@ -1091,7 +1091,7 @@ Standalone service (not an MCP server) that polls watchlists and sends notificat
 | Search results | 15 min | In-memory LRU |
 | Listing details | 1 hour | SQLite |
 | Images | 24 hours | Disk |
-| VIN decode | 30 days | SQLite |
+| VIN decode | 90 days | SQLite |
 | Carfax reports | 30 days | SQLite |
 | NMVTIS title checks | 30 days | SQLite |
 | Sold history / comps | 7 days | SQLite |
