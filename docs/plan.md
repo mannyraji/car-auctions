@@ -5,6 +5,15 @@
 
 ---
 
+### Changelog
+
+| Version | Date | Changes |
+|---------|------|---------|
+| v1.1 | 2026-04-08 | Marked Phase 0, 1, 2 complete; reconciled VIN cache TTL with spec (90 days) |
+| v1.0 | 2026-04-05 | Initial implementation plan |
+
+---
+
 ## Overview
 
 Build a TypeScript monorepo with 8 MCP server packages, a shared library, and an alerts service. The project surfaces AI-powered deal analysis for salvage auction car flippers by scraping Copart/IAAI, pulling vehicle history from Carfax/NMVTIS, sourcing real parts pricing, and computing profit/risk scores.
@@ -128,11 +137,11 @@ OTEL_SERVICE_NAME=car-auctions
 
 ### Acceptance Criteria
 
-- [ ] `npm install` succeeds at root (all workspaces resolve)
-- [ ] `npx tsc --build` succeeds (empty projects, valid configs)
-- [ ] All 9 package directories exist with `package.json` + `tsconfig.json`
-- [ ] `data/` dirs are gitignored
-- [ ] ESLint + Prettier configs are valid
+- [x] `npm install` succeeds at root (all workspaces resolve)
+- [x] `npx tsc --build` succeeds (empty projects, valid configs)
+- [x] All 9 package directories exist with `package.json` + `tsconfig.json`
+- [x] `data/` dirs are gitignored
+- [x] ESLint + Prettier configs are valid
 
 ---
 
@@ -193,12 +202,12 @@ ws @types/ws
 
 ### Acceptance Criteria
 
-- [ ] `npm run build` in `packages/shared` produces valid JS output
-- [ ] Types are importable from other workspace packages: `import { AuctionListing } from '@car-auctions/shared'`
-- [ ] VIN decoder unit tests pass (mocked NHTSA responses)
-- [ ] Auction normalizer tests pass with Copart + IAAI fixture data
-- [ ] Priority queue tests pass: ordering, preemption, starvation prevention
-- [ ] Tracing is no-op when `OTEL_EXPORTER_OTLP_ENDPOINT` is unset
+- [x] `npm run build` in `packages/shared` produces valid JS output
+- [x] Types are importable from other workspace packages: `import { AuctionListing } from '@car-auctions/shared'`
+- [x] VIN decoder unit tests pass (mocked NHTSA responses)
+- [x] Auction normalizer tests pass with Copart + IAAI fixture data
+- [x] Priority queue tests pass: ordering, preemption, starvation prevention
+- [x] Tracing is no-op when `OTEL_EXPORTER_OTLP_ENDPOINT` is unset
 
 ---
 
@@ -298,15 +307,15 @@ CREATE TABLE watchlist_history (
 
 ### Acceptance Criteria
 
-- [ ] All parser tests pass with fixture data
-- [ ] All tool handler tests pass with mocked scraper
-- [ ] MCP server starts via stdio: `node dist/index.js`
-- [ ] `copart_search` returns array of `AuctionListing` objects
-- [ ] `copart_get_listing` returns full details
-- [ ] `copart_get_images` returns base64-encoded images with categories
-- [ ] `copart_watch_listing` add/remove/list round-trips correctly
-- [ ] Cache hit/miss logged
-- [ ] SQLite WAL mode active
+- [x] All parser tests pass with fixture data
+- [x] All tool handler tests pass with mocked scraper
+- [x] MCP server starts via stdio: `node dist/index.js`
+- [x] `copart_search` returns array of `AuctionListing` objects
+- [x] `copart_get_listing` returns full details
+- [x] `copart_get_images` returns base64-encoded images with categories
+- [x] `copart_watch_listing` add/remove/list round-trips correctly
+- [x] Cache hit/miss logged
+- [x] SQLite WAL mode active
 
 ---
 
