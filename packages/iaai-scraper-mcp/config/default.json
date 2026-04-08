@@ -1,0 +1,21 @@
+{
+  "rateLimit": {
+    "requestsPerSecond": 0.33,
+    "maxConcurrent": 1,
+    "backoffMultiplier": 2,
+    "maxBackoffMs": 60000,
+    "dailyCap": 500
+  },
+  "cache": {
+    "searchTtlMinutes": 15,
+    "listingTtlMinutes": 60,
+    "imageTtlHours": 24,
+    "soldTtlDays": 7,
+    "vinTtlDays": 90,
+    "lruMaxEntries": 200
+  },
+  "proxy": {
+    "url": null,
+    "rotateOnFailure": true
+  }
+}
