@@ -38,9 +38,11 @@ for ws in "${!workspaces[@]}"; do
   echo "Type-checking $ws ..." >&2
   tsc_output=$(npx tsc --noEmit -p "$ws/tsconfig.json" 2>&1 || true)
 
-  # Parse TSC output: file(line,col): error TS1234: message
+  # Parse TSC output — Linux: file:line:col - error TS1234: message
+  #                     Windows: file(line,col): error TS1234: message
   while IFS= read -r line; do
-    if [[ "$line" =~ ^(.+)\(([0-9]+),[0-9]+\):\ error\ (TS[0-9]+):\ (.+)$ ]]; then
+    if [[ "$line" =~ ^(.+):([0-9]+):[0-9]+\ -\ error\ (TS[0-9]+):\ (.+)$ ]] ||
+       [[ "$line" =~ ^(.+)\(([0-9]+),[0-9]+\):\ error\ (TS[0-9]+):\ (.+)$ ]]; then
       file="${BASH_REMATCH[1]}"
       lineno="${BASH_REMATCH[2]}"
       code="${BASH_REMATCH[3]}"
