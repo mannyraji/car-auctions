@@ -1,0 +1,82 @@
+{
+  "items": [
+    {
+      "stockNumber": "S10000001",
+      "vin": "1HGCM82633A001001",
+      "year": 2018,
+      "makeName": "Toyota",
+      "modelName": "Camry",
+      "titleCode": "SV",
+      "primaryDamage": "Front End",
+      "odometer": "55000",
+      "saleDate": "2026-01-10T10:00:00Z",
+      "saleStatus": "SOLD",
+      "finalBid": 4200,
+      "branchName": "Houston North",
+      "branchZip": "77060"
+    },
+    {
+      "stockNumber": "S10000002",
+      "vin": "1HGCM82633A001002",
+      "year": 2019,
+      "makeName": "Toyota",
+      "modelName": "Camry",
+      "titleCode": "SV",
+      "primaryDamage": "Rear End",
+      "odometer": "38000",
+      "saleDate": "2026-01-15T10:00:00Z",
+      "saleStatus": "SOLD",
+      "finalBid": 5800,
+      "branchName": "Houston North",
+      "branchZip": "77060"
+    },
+    {
+      "stockNumber": "S10000003",
+      "vin": "1HGCM82633A001003",
+      "year": 2017,
+      "makeName": "Toyota",
+      "modelName": "Camry",
+      "titleCode": "FL",
+      "primaryDamage": "Flood",
+      "odometer": "72000",
+      "saleDate": "2026-01-22T10:00:00Z",
+      "saleStatus": "SOLD",
+      "finalBid": null,
+      "branchName": "Dallas South",
+      "branchZip": "75217"
+    },
+    {
+      "stockNumber": "S10000004",
+      "vin": "1HGCM82633A001004",
+      "year": 2020,
+      "makeName": "Toyota",
+      "modelName": "Camry",
+      "titleCode": "SV",
+      "primaryDamage": "Side",
+      "odometer": "28500",
+      "saleDate": "2026-02-01T10:00:00Z",
+      "saleStatus": "SOLD",
+      "finalBid": 7100,
+      "branchName": "Dallas South",
+      "branchZip": "75217"
+    },
+    {
+      "stockNumber": "S10000005",
+      "vin": "1HGCM82633A001005",
+      "year": 2016,
+      "makeName": "Toyota",
+      "modelName": "Camry",
+      "titleCode": "RB",
+      "primaryDamage": "All Over",
+      "odometer": "94300",
+      "saleDate": "2026-02-10T10:00:00Z",
+      "saleStatus": "SOLD",
+      "finalBid": 3500,
+      "branchName": "Atlanta West",
+      "branchZip": "30301"
+    }
+  ],
+  "totalCount": 5,
+  "startIndex": 0,
+  "pageSize": 20
+}
