@@ -110,7 +110,14 @@ Before running prerequisite checks, resolve any GitHub issue reference in `$ARGU
    - **IF `GITHUB_ISSUE_NUMBER` is set**: Treat the fetched issue title and body as supplemental context when interpreting tasks.md and plan.md. Use it to resolve ambiguous requirement intent — it does not override local spec artifacts.
 
 4. **Project Setup Verification**:
-   - **REQUIRED**: Create/verify ignore files based on actual project setup:
+  - **REQUIRED**: Validate ignore coverage and only auto-create missing ignore files when explicitly required by project setup:
+
+  **Git Submodule Detection**:
+  - If `.gitmodules` exists, read it and extract all submodule paths.
+  - For each submodule path, ensure it is excluded from linting/formatting scope.
+  - For ESLint flat config (`eslint.config.*`), validate exclusion in the config `ignores` array.
+  - For Prettier, validate exclusion in `.prettierignore`.
+  - Report missing submodule exclusions as warnings; do not auto-edit unrelated files.
 
    **Detection & Creation Logic**:
    - Check if the following command succeeds to determine if the repository is a git repo (create/verify .gitignore if so):
@@ -120,14 +127,14 @@ Before running prerequisite checks, resolve any GitHub issue reference in `$ARGU
      ```
 
    - Check if Dockerfile* exists or Docker in plan.md → create/verify .dockerignore
-   - Check if .eslintrc* exists → create/verify .eslintignore
-   - Check if eslint.config.* exists → ensure the config's `ignores` entries cover required patterns
+  - Check if .eslintrc* exists → create/verify .eslintignore (legacy repositories only)
+  - Check if eslint.config.* exists → validate that `ignores` includes required patterns (`**/node_modules/**`, `**/dist/**`, `**/build/**`, `**/coverage/**`, `**/*.min.js`, and any git submodule paths)
    - Check if .prettierrc* exists → create/verify .prettierignore
    - Check if .npmrc or package.json exists → create/verify .npmignore (if publishing)
    - Check if terraform files (*.tf) exist → create/verify .terraformignore
    - Check if .helmignore needed (helm charts present) → create/verify .helmignore
 
-   **If ignore file already exists**: Verify it contains essential patterns, append missing critical patterns only
+  **If ignore file already exists**: Verify it contains essential patterns and report any gaps before making changes
    **If ignore file missing**: Create with full pattern set for detected technology
 
    **Common Patterns by Technology** (from plan.md tech stack):
@@ -216,8 +223,8 @@ Before running prerequisite checks, resolve any GitHub issue reference in `$ARGU
    - Suggest next steps if implementation cannot proceed
    - **IMPORTANT** For completed tasks, make sure to mark the task off as [X] in the tasks file.
    - **Commit linking** (when `GITHUB_ISSUE_NUMBER` is set): After each completed task group, display a recommended commit message template using the resolved issue number (e.g. `42`, not the literal string `GITHUB_ISSUE_NUMBER`):
-     - For intermediate task groups: `git commit -m "feat: [description] (Part of #{resolved issue number)"`
-     - For the final task group: `git commit -m "feat: [description] (Closes #{resolved issue number)"`
+     - For intermediate task groups: `git commit -m "feat: [description] (Part of #<resolved issue number>)"`
+     - For the final task group: `git commit -m "feat: [description] (Closes #<resolved issue number>)"`
    - **Push tasks.md progress** (advisory — do not auto-execute): After marking tasks `[X]`, recommend:
      ```sh
      git add {FEATURE_DIR}/tasks.md && git commit -m "chore: mark {TASK_ID} complete" && git push
