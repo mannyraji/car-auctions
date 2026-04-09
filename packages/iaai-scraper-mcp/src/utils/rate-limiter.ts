@@ -1,0 +1,92 @@
+/**
+ * Rate limiter for IAAI requests
+ * Enforces 1 req/3s, exponential backoff on 403/429, daily cap 500
+ */
+import { RateLimitError } from '@car-auctions/shared';
+
+interface RateLimiterConfig {
+  requestsPerSecond?: number;
+  dailyCap?: number;
+  backoffMultiplier?: number;
+  maxBackoffMs?: number;
+}
+
+export class RateLimiter {
+  private readonly minIntervalMs: number;
+  private lastRequestAt = 0;
+  private dailyCount = 0;
+  private dailyResetAt: number;
+  private readonly dailyCap: number;
+  private readonly backoffMultiplier: number;
+  private readonly maxBackoffMs: number;
+  private currentBackoffMs = 0;
+
+  constructor(config: RateLimiterConfig = {}) {
+    const rps = config.requestsPerSecond ?? 0.33;
+    this.minIntervalMs = Math.ceil(1000 / rps);
+    this.dailyCap = config.dailyCap ?? 500;
+    this.backoffMultiplier = config.backoffMultiplier ?? 2;
+    this.maxBackoffMs = config.maxBackoffMs ?? 60000;
+    this.dailyResetAt = this.nextMidnight();
+  }
+
+  async acquire(): Promise<void> {
+    if (Date.now() >= this.dailyResetAt) {
+      this.dailyCount = 0;
+      this.dailyResetAt = this.nextMidnight();
+    }
+
+    if (this.dailyCount >= this.dailyCap) {
+      throw new RateLimitError('Daily request cap reached', this.dailyResetAt - Date.now());
+    }
+
+    await this.waitForSlot();
+
+    if (this.currentBackoffMs > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, this.currentBackoffMs));
+    }
+
+    this.dailyCount++;
+  }
+
+  applyBackoff(): void {
+    this.currentBackoffMs = Math.min(
+      (this.currentBackoffMs || 1000) * this.backoffMultiplier,
+      this.maxBackoffMs
+    );
+  }
+
+  resetBackoff(): void {
+    this.currentBackoffMs = 0;
+  }
+
+  async execute<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      const result = await fn();
+      this.resetBackoff();
+      return result;
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        this.applyBackoff();
+      }
+      throw err;
+    }
+  }
+
+  private async waitForSlot(): Promise<void> {
+    const now = Date.now();
+    const elapsed = now - this.lastRequestAt;
+    if (elapsed < this.minIntervalMs) {
+      await new Promise<void>((resolve) => setTimeout(resolve, this.minIntervalMs - elapsed));
+    }
+    this.lastRequestAt = Date.now();
+  }
+
+  private nextMidnight(): number {
+    const tomorrow = new Date();
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    tomorrow.setUTCHours(0, 0, 0, 0);
+    return tomorrow.getTime();
+  }
+}

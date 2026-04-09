@@ -117,6 +117,29 @@ export interface WatchlistEntry {
   notes: string | null;
 }
 
+/** Watchlist history entry */
+export interface WatchlistHistoryEntry {
+  id: number;
+  lot_number: string;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  detected_at: string;
+}
+
+/** Params for watchlist add */
+export interface WatchlistAddParams {
+  lot_number: string;
+  bid_threshold?: number;
+  notes?: string;
+}
+
+/** Options for getImages */
+export interface IaaiGetImagesOpts {
+  maxImages?: number;
+  imageTypes?: string[];
+}
+
 /** Persisted IAAI session state used for auth restoration. */
 export interface IaaiSession {
   cookies: Array<{
@@ -143,4 +166,6 @@ export interface ScraperResult<T> {
   stale: boolean;
   /** ISO timestamp when data was cached; null if freshly scraped. */
   cachedAt: string | null;
+  /** Whether the result is partial (some images missing). Only used by getImages. */
+  partial?: boolean;
 }
