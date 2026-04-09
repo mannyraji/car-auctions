@@ -16,6 +16,42 @@ const CAPTCHA_SELECTORS = [
   'form[action*="captcha"]',
 ];
 
+// ─── Mouse/scroll simulation tuning constants ─────────────────────────────────
+
+/** Minimum number of mouse moves per simulation */
+const MOUSE_MOVES_MIN = 3;
+/** Maximum number of mouse moves per simulation */
+const MOUSE_MOVES_MAX = 8;
+/** Minimum X coordinate for mouse moves */
+const MOUSE_X_MIN = 100;
+/** Maximum X coordinate offset for mouse moves (added to MOUSE_X_MIN) */
+const MOUSE_X_RANGE = 1200;
+/** Minimum Y coordinate for mouse moves */
+const MOUSE_Y_MIN = 100;
+/** Maximum Y coordinate offset for mouse moves (added to MOUSE_Y_MIN) */
+const MOUSE_Y_RANGE = 700;
+/** Minimum steps for a single mouse move (controls smoothness) */
+const MOUSE_STEPS_MIN = 5;
+/** Maximum steps for a single mouse move */
+const MOUSE_STEPS_MAX = 15;
+/** Minimum pause between mouse moves in ms */
+const MOUSE_PAUSE_MIN_MS = 50;
+/** Maximum pause between mouse moves in ms */
+const MOUSE_PAUSE_MAX_MS = 250;
+
+/** Minimum number of scroll actions per simulation */
+const SCROLL_COUNT_MIN = 2;
+/** Maximum number of scroll actions per simulation */
+const SCROLL_COUNT_MAX = 5;
+/** Minimum scroll distance in pixels */
+const SCROLL_DIST_MIN = 100;
+/** Maximum scroll distance offset in pixels (added to SCROLL_DIST_MIN) */
+const SCROLL_DIST_RANGE = 400;
+/** Minimum pause between scroll actions in ms */
+const SCROLL_PAUSE_MIN_MS = 200;
+/** Maximum pause between scroll actions in ms */
+const SCROLL_PAUSE_MAX_MS = 700;
+
 /**
  * Resolves after a random delay within [minMs, maxMs].
  *
@@ -39,22 +75,30 @@ export async function randomDelay(
  */
 export async function simulateMouseMovement(page: Page): Promise<void> {
   // Random mouse moves
-  const moves = Math.floor(Math.random() * 5) + 3;
+  const moves =
+    Math.floor(Math.random() * (MOUSE_MOVES_MAX - MOUSE_MOVES_MIN + 1)) + MOUSE_MOVES_MIN;
   for (let i = 0; i < moves; i++) {
-    const x = Math.floor(Math.random() * 1200) + 100;
-    const y = Math.floor(Math.random() * 700) + 100;
-    await page.mouse.move(x, y, { steps: Math.floor(Math.random() * 10) + 5 });
-    await new Promise<void>((resolve) => setTimeout(resolve, Math.floor(Math.random() * 200) + 50));
+    const x = Math.floor(Math.random() * MOUSE_X_RANGE) + MOUSE_X_MIN;
+    const y = Math.floor(Math.random() * MOUSE_Y_RANGE) + MOUSE_Y_MIN;
+    const steps =
+      Math.floor(Math.random() * (MOUSE_STEPS_MAX - MOUSE_STEPS_MIN + 1)) + MOUSE_STEPS_MIN;
+    await page.mouse.move(x, y, { steps });
+    const pause =
+      Math.floor(Math.random() * (MOUSE_PAUSE_MAX_MS - MOUSE_PAUSE_MIN_MS + 1)) +
+      MOUSE_PAUSE_MIN_MS;
+    await new Promise<void>((resolve) => setTimeout(resolve, pause));
   }
 
   // Random scroll simulation
-  const scrolls = Math.floor(Math.random() * 3) + 2;
+  const scrolls =
+    Math.floor(Math.random() * (SCROLL_COUNT_MAX - SCROLL_COUNT_MIN + 1)) + SCROLL_COUNT_MIN;
   for (let i = 0; i < scrolls; i++) {
-    const distance = Math.floor(Math.random() * 400) + 100;
+    const distance = Math.floor(Math.random() * SCROLL_DIST_RANGE) + SCROLL_DIST_MIN;
     await page.mouse.wheel(0, distance);
-    await new Promise<void>((resolve) =>
-      setTimeout(resolve, Math.floor(Math.random() * 500) + 200)
-    );
+    const pause =
+      Math.floor(Math.random() * (SCROLL_PAUSE_MAX_MS - SCROLL_PAUSE_MIN_MS + 1)) +
+      SCROLL_PAUSE_MIN_MS;
+    await new Promise<void>((resolve) => setTimeout(resolve, pause));
   }
 }
 
