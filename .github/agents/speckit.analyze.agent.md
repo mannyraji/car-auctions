@@ -1,5 +1,16 @@
 ---
 description: Perform a non-destructive cross-artifact consistency and quality analysis across spec.md, plan.md, and tasks.md after task generation.
+handoffs:
+  - label: Fix Ambiguities
+    agent: speckit.clarify
+    prompt: Resolve the ambiguities identified in the analysis report
+  - label: Regenerate Tasks
+    agent: speckit.tasks
+    prompt: Regenerate tasks.md incorporating the analysis corrections
+  - label: Implement Project
+    agent: speckit.implement
+    prompt: Start the implementation in phases
+    send: true
 ---
 
 ## User Input
@@ -19,6 +30,40 @@ Identify inconsistencies, duplications, ambiguities, and underspecified items ac
 **STRICTLY READ-ONLY**: Do **not** modify any files. Output a structured analysis report. Offer an optional remediation plan (user must explicitly approve before any follow-up editing commands would be invoked manually).
 
 **Constitution Authority**: The project constitution (`.specify/memory/constitution.md`) is **non-negotiable** within this analysis scope. Constitution conflicts are automatically CRITICAL and require adjustment of the spec, plan, or tasks—not dilution, reinterpretation, or silent ignoring of the principle. If a principle itself needs to change, that must occur in a separate, explicit constitution update outside `/speckit.analyze`.
+
+## Pre-Execution Checks
+
+**Check for extension hooks (before analysis)**:
+- Check if `.specify/extensions.yml` exists in the project root.
+- If it exists, read it and look for entries under the `hooks.before_analyze` key
+- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
+- Skip hooks entirely — do not display, mention, or execute them — where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
+- For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
+  - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
+  - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
+- For each executable hook, output the following based on its `optional` flag:
+  - **Optional hook** (`optional: true`):
+    ```
+    ## Extension Hooks
+
+    **Optional Pre-Hook**: {extension}
+    Command: `/{command}`
+    Description: {description}
+
+    Prompt: {prompt}
+    To execute: `/{command}`
+    ```
+  - **Mandatory hook** (`optional: false`):
+    ```
+    ## Extension Hooks
+
+    **Automatic Pre-Hook**: {extension}
+    Executing: `/{command}`
+    EXECUTE_COMMAND: {command}
+
+    Wait for the result of the hook command before proceeding to the Execution Steps.
+    ```
+- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Execution Steps
 
@@ -77,6 +122,10 @@ Create internal representations (do not include raw artifacts in output):
 
 Focus on high-signal findings. Limit to 50 findings total; aggregate remainder in overflow summary.
 
+**CRITICAL Short-Circuit Rule**: After each detection pass completes, check if any CRITICAL findings have been recorded. If yes, halt all remaining passes immediately. Proceed directly to Step 6 with this banner at the top of the report:
+
+> ⚠ Analysis Halted — CRITICAL findings require resolution before further analysis is meaningful. Resolve CRITICAL issues and re-run `/speckit.analyze`.
+
 #### A. Duplication Detection
 
 - Identify near-duplicate requirements
@@ -95,8 +144,12 @@ Focus on high-signal findings. Limit to 50 findings total; aggregate remainder i
 
 #### D. Constitution Alignment
 
-- Any requirement or plan element conflicting with a MUST principle
-- Missing mandated sections or quality gates from constitution
+Delegate constitution validation to the `speckit.constitution` agent in read-only audit mode:
+- Invoke `speckit.constitution` with a prompt to audit the loaded `spec.md`, `plan.md`, and `tasks.md` against `.specify/memory/constitution.md` **without making any changes**
+- Incorporate all returned findings as Pass D rows in the analysis report (preserve severity as-is)
+- Any MUST principle violation is automatically CRITICAL
+
+**Fallback** (if `speckit.constitution` is unavailable or errors): Load `.specify/memory/constitution.md` directly, extract all MUST/SHOULD normative statements, and manually check each artifact for conflicts or missing mandated sections.
 
 #### E. Coverage Gaps
 

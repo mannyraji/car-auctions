@@ -34,6 +34,7 @@ export interface AuctionListing {
   sale_status: string;
   final_bid: number | null;
   location: string;
+  location_zip: string | null;
   latitude: number | null;
   longitude: number | null;
   image_url: string | null;
@@ -104,6 +105,7 @@ export interface IaaiRawListing {
   saleStatus?: string;
   finalBid?: number;
   branchName?: string;
+  branchZip?: string | number;
   latitude?: number;
   longitude?: number;
   imageUrls?: Record<string, unknown> | string[];

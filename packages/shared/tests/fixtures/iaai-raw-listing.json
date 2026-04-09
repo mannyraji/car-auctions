@@ -23,6 +23,7 @@
   "saleStatus": "UPCOMING",
   "finalBid": null,
   "branchName": "Houston North",
+  "branchZip": "77060",
   "latitude": 29.9902,
   "longitude": -95.3368,
   "imageUrls": {

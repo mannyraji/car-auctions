@@ -48,6 +48,7 @@ export function normalizeCopart(raw: CopartRawListing): AuctionListing {
     sale_status: String(raw.ss ?? 'UPCOMING'),
     final_bid: raw.fb != null ? Number(raw.fb) : null,
     location: String(raw.ld ?? ''),
+    location_zip: null,
     latitude: raw.lat != null ? Number(raw.lat) : null,
     longitude: raw.lng != null ? Number(raw.lng) : null,
     image_url: imageUrls.length > 0 ? imageUrls[0] : raw.imgUrl != null ? String(raw.imgUrl) : null,

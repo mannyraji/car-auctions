@@ -93,6 +93,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Independent test criteria for each story
    - Suggested MVP scope (typically just User Story 1)
    - Format validation: Confirm ALL tasks follow the checklist format (checkbox, ID, labels, file paths)
+   - If remediation tasks were added in step 7, include a **Remediation** subsection listing the FRs that were missing and the tasks added to cover them
 
 6. **Check for extension hooks**: After tasks.md is generated, check if `.specify/extensions.yml` exists in the project root.
    - If it exists, read it and look for entries under the `hooks.after_tasks` key
@@ -122,6 +123,33 @@ You **MUST** consider the user input before proceeding (if not empty).
        EXECUTE_COMMAND: {command}
        ```
    - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
+
+7. **Remediate coverage gaps** (after spec-trace hook only):
+   - Extract the fenced `json` block from the spec-trace output and parse it. Use the `missing_frs` array and `status` field to determine gaps. If `status` is `"PASS"` or `missing_frs` is empty, skip remediation and proceed to Report
+   - **Fallback**: If no JSON block is present in the output, fall back to parsing the trace matrix for requirements where Coverage = "None" (the "Unimplemented requirement" category)
+   - If **all requirements are covered**: skip remediation, proceed to Report
+   - If **missing requirements found**, for each missing FR (from `missing_frs` array or trace matrix):
+     1. Look up the FR in spec.md to identify its user story and priority
+     2. Generate new tasks following the Task Generation Rules below (checkbox format, sequential task IDs, `[US*]` story labels, exact file paths)
+     3. Append the new tasks to the appropriate phase in tasks.md
+     4. Renumber subsequent task IDs in tasks.md to maintain sequential ordering
+   - After patching tasks.md, re-run the spec-trace hook:
+     ```
+     **Re-validation**: spec-trace
+     Executing: `/spec-trace`
+     EXECUTE_COMMAND: spec-trace
+     ```
+   - If gaps remain, repeat this remediation cycle **once more** (max 2 cycles total)
+   - If gaps **still remain after 2 cycles**, halt and surface the remaining uncovered FRs to the user:
+     ```
+     ## Unresolved Coverage Gaps
+
+     The following requirements could not be automatically covered after 2 remediation cycles:
+     - {FR-ID}: {description} (from spec.md)
+
+     Please review and manually add tasks or clarify the spec.
+     ```
+   - If no spec-trace hook was executed in step 6, skip this step entirely
 
 Context for task generation: $ARGUMENTS
 

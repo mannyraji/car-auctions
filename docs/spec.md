@@ -260,13 +260,13 @@ car-auctions/
 
 ## Tech Stack
 
-- Runtime: Node.js 20+, TypeScript 5+
+- Runtime: Node.js 20+, TypeScript 5+ (ES2022 target, Node16 module resolution, strict mode)
 - MCP SDK: `@modelcontextprotocol/sdk` (latest) — register stdio, SSE, and WebSocket transports
 - Browser automation: `playwright` + `playwright-extra` + `puppeteer-extra-plugin-stealth`
 - Cache: `better-sqlite3` for persistent cache, in-memory LRU for search results
 - Image processing: `sharp` for resize/compress before base64 encoding
 - Alerts: `node-cron` for polling, `resend` for email, standard fetch for webhooks
-- Observability: `@opentelemetry/sdk-node`, `@opentelemetry/auto-instrumentations-node`
+- Observability: `@opentelemetry/sdk-node`, `@opentelemetry/auto-instrumentations-node`, `@opentelemetry/exporter-trace-otlp-http`
 - WebSocket: `ws` for real-time bid transport
 - Testing: `vitest`
 - Config: `dotenv` + JSON config files
@@ -607,7 +607,7 @@ Detailed cost breakdown and margin calculation. Params: lot_number, source, buye
 interface ProfitEstimate {
   acquisition: {
     current_bid: number;
-    buyer_premium: number;        // Tiered: 18% on first $7500, then lower brackets
+    buyer_premium: number;        // Copart buyer fee per documented tiered schedule: flat fees through lower bid bands, 5% at $8,000+
     gate_fee: number;             // Typically $59-$79
     title_fee: number;            // State-dependent
     environmental_fee: number;    // $15-$25
