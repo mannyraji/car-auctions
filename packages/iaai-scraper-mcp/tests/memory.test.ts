@@ -75,6 +75,17 @@ describe('MemoryCache', () => {
     expect(cache.size).toBe(0);
   });
 
+  it('updating an existing key does not evict other entries', () => {
+    const cache = new MemoryCache<number>(2, 15);
+    cache.set('a', 1);
+    cache.set('b', 2);
+    // Update 'a' — should not evict 'b'
+    cache.set('a', 99);
+    expect(cache.get('b')).toBe(2);
+    expect(cache.get('a')).toBe(99);
+    expect(cache.size).toBe(2);
+  });
+
   it('defaults to max 200 entries', () => {
     const cache = new MemoryCache<number>();
     for (let i = 0; i < 200; i++) {

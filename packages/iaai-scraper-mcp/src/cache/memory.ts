@@ -32,7 +32,7 @@ export class MemoryCache<T = unknown> {
 
   set(key: string, value: T): void {
     this.evictExpired();
-    if (this.store.size >= this.maxEntries) {
+    if (this.store.size >= this.maxEntries && !this.store.has(key)) {
       this.evictLru();
     }
     this.store.set(key, {
