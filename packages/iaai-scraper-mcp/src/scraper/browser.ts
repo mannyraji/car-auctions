@@ -19,6 +19,7 @@ export class IaaiBrowser {
   private browser: import('playwright').Browser | null = null;
   private context: BrowserContext | null = null;
   private launchPromise: Promise<void> | null = null;
+  private _reauthing = false;
 
   async launch(): Promise<void> {
     if (this.browser) return;
@@ -185,16 +186,26 @@ export class IaaiBrowser {
 
     const page = await this.context.newPage();
 
-    // Detect redirect to login on navigation and re-authenticate once
+    // Detect redirect to login and re-authenticate once (guarded against concurrent attempts)
     page.on('response', (response) => {
-      const url = response.url();
-      if (url.includes('/Account/Login')) {
+      try {
+        const parsed = new URL(response.url());
+        const isLoginRedirect =
+          parsed.hostname === 'www.iaai.com' && parsed.pathname === '/Account/Login';
+        if (!isLoginRedirect || this._reauthing) return;
+
         const email = process.env['IAAI_EMAIL'];
         const password = process.env['IAAI_PASSWORD'];
         if (email && password) {
-          // Fire and forget — re-auth is best-effort here
-          this.authenticate(email, password).catch(() => {});
+          this._reauthing = true;
+          this.authenticate(email, password)
+            .catch(() => {})
+            .finally(() => {
+              this._reauthing = false;
+            });
         }
+      } catch {
+        // Ignore malformed URLs
       }
     });
 

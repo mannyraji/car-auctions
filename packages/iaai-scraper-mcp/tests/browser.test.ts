@@ -183,10 +183,10 @@ describe('IaaiBrowser', () => {
     });
 
     it('throws CaptchaError when CAPTCHA is detected after form submit', async () => {
-      // First isCaptchaPage call returns false (before form fill), second returns true (after submit)
+      // First isCaptchaPage call (pre-fill check at line 77) returns false, second (post-submit check at line 87) returns true
       mockPage.url
-        .mockReturnValueOnce('https://www.iaai.com/Account/Login') // before fill
-        .mockReturnValueOnce('https://www.iaai.com/challenge'); // after submit
+        .mockReturnValueOnce('https://www.iaai.com/Account/Login') // first CAPTCHA detection check
+        .mockReturnValueOnce('https://www.iaai.com/challenge'); // second CAPTCHA detection check
 
       const b = new IaaiBrowser();
       await b.launch();
