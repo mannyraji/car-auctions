@@ -2,14 +2,55 @@
 # Hooks run automatically (mandatory) or prompt the user (optional) at each phase.
 
 hooks:
+  # ── Before task generation ────────────────────────────────────────
+  # Keep before_tasks hooks unconditional for now (no `condition` field),
+  # because condition evaluation is delegated to hook execution runtime.
+  before_tasks:
+    - extension: speckit.clarify
+      command: speckit.clarify
+      description: Resolve high-impact ambiguities before task decomposition
+      prompt: Run speckit.clarify to tighten spec decisions before generating tasks
+      optional: false
+      enabled: true
+
+    - extension: speckit.checklist
+      command: speckit.checklist
+      description: Validate requirement quality before generating tasks
+      prompt: Run speckit.checklist focused on requirement clarity and coverage
+      optional: false
+      enabled: true
+
+    - extension: contract-check
+      command: contract-check
+      description: Validate contracts prior to deriving implementation tasks
+      prompt: Run contract-check if this feature includes or changes API contracts
+      optional: true
+      enabled: true
+
   # ── After task generation ──────────────────────────────────────────
   after_tasks:
     - extension: spec-trace
       command: spec-trace
       description: Trace tasks back to spec requirements for coverage validation
       prompt: Run spec-trace on the generated tasks.md to verify all requirements from spec.md are covered
-      optional: true
+      optional: false
       enabled: true
+
+    - extension: speckit.analyze
+      command: speckit.analyze
+      description: Cross-artifact consistency check before implementation
+      prompt: Run a project analysis for consistency
+      optional: false
+      enabled: true
+
+  # ── Before analysis ──────────────────────────────────────────────────
+  before_analyze:
+    - extension: speckit.checklist
+      command: speckit.checklist
+      description: Validate requirement quality before cross-artifact analysis
+      prompt: Run speckit.checklist focused on requirement clarity before the consistency analysis
+      optional: true
+      enabled: false
 
   # ── Before implementation ──────────────────────────────────────────
   before_implement:

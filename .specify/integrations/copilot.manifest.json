@@ -3,7 +3,7 @@
   "version": "0.5.1.dev0",
   "installed_at": "2026-04-06T14:39:13.643960+00:00",
   "files": {
-    ".github/agents/speckit.analyze.agent.md": "0dd76be34a60e3630f3eb8b54e4005035bc98d91e04566282b724453951d975d",
+    ".github/agents/speckit.analyze.agent.md": "a50b8f3632ec83d24b904b6eee66aca4c8a00a760ffb7931465c68f71d12fe27",
     ".github/agents/speckit.checklist.agent.md": "3bfb97f3286265a75f7f9321e79a3d31130a5be213013662fa2e43f22199942a",
     ".github/agents/speckit.clarify.agent.md": "0e7aeb5133272ace15629e560d394f9ea1622ca3873409b4d075c6c9f588d890",
     ".github/agents/speckit.constitution.agent.md": "89e14df67db5f8a52b8802a6e396b69d3e4badc46e97de804810aaaf439e0d5e",

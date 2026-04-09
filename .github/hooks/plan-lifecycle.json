@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "SubagentStart": [
+      {
+        "type": "command",
+        "command": "bash .github/hooks/scripts/before-plan.sh",
+        "timeout": 15
+      }
+    ],
+    "SubagentStop": [
+      {
+        "type": "command",
+        "command": "bash .github/hooks/scripts/after-plan.sh",
+        "timeout": 15
+      }
+    ]
+  }
+}

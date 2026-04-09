@@ -18,3 +18,4 @@ Thumbs.db
 .idea/
 data/
 packages/shared/data/
+.github/hooks/logs/
