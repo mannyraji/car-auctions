@@ -102,7 +102,7 @@ export class IaaiInterceptor {
           cleanup();
           resolve(null);
         }
-      }, this.listingTimeoutMs);
+      }, this.listingTimeoutMs).unref();
 
       const handler = async (route: Route) => {
         try {
@@ -188,13 +188,13 @@ export class IaaiInterceptor {
           cleanup();
           resolve(null);
         }
-      }, timeoutMs);
+      }, timeoutMs).unref();
 
       const handler = async (route: Route) => {
         const reqUrl = new URL(route.request().url());
 
         if (filter && !filter(reqUrl)) {
-          await route.continue();
+          await route.continue().catch(() => {});
           return;
         }
 
