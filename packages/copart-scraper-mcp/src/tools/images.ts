@@ -34,13 +34,24 @@ export function createImagesHandler(client: CopartClient, imageCache: ImageCache
 
     try {
       const result = await client.getImages(parsed.data.lot_number);
-      const images = await Promise.all(
+      const settled = await Promise.allSettled(
         result.data.map(async (url, i) => ({
           url,
           category: i === 0 ? 'primary' : `view_${i}`,
           base64: await fetchImageAsBase64(url, imageCache),
         }))
       );
+      const images = settled
+        .filter(
+          (
+            r
+          ): r is PromiseFulfilledResult<{
+            url: string;
+            category: string;
+            base64: string | null;
+          }> => r.status === 'fulfilled'
+        )
+        .map((r) => r.value);
       return createSuccessResponse(
         { lot_number: parsed.data.lot_number, images },
         { cached: result.cached, stale: result.stale, cachedAt: result.cachedAt }

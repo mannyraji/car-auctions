@@ -23,6 +23,7 @@ async function main(): Promise<void> {
   const shutdown = async (): Promise<void> => {
     await browser.close();
     cache.close();
+    vinCache.close();
     process.exit(0);
   };
   process.on('SIGINT', () => {

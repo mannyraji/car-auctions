@@ -10,11 +10,27 @@ const JPEG_QUALITY = 80;
 const FETCH_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+const ALLOWED_IMAGE_HOSTS = ['cs.copart.com', 'cdn.copart.com', 'www.copart.com', 'copart.com'];
+
+function isAllowedImageUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    return ALLOWED_IMAGE_HOSTS.some(
+      (host) => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Fetch an image URL, compress it, and return a base64 data URI.
  * Returns null if the fetch or encoding fails.
  */
 export async function fetchImageAsBase64(url: string, cache?: ImageCache): Promise<string | null> {
+  if (!isAllowedImageUrl(url)) return null;
+
   // Cache stores the already-compressed JPEG — return directly without recompressing
   if (cache) {
     const cached = await cache.get(url);
