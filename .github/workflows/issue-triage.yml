@@ -1,0 +1,320 @@
+name: Issue Auto Triage
+
+on:
+  issues:
+    types: [opened, reopened, edited, unlabeled]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply triage labels and suggestions
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            if (!issue || issue.pull_request) {
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = issue.number;
+            const body = issue.body || "";
+            const title = issue.title || "";
+            const marker = "<!-- triage-agent -->";
+
+            const currentLabels = new Set((issue.labels || []).map((label) =>
+              typeof label === "string" ? label : label.name
+            ));
+
+            if (currentLabels.has("needs-info")) {
+              return;
+            }
+
+            function escapeRegExp(value) {
+              return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            }
+
+            function extractSection(markdown, header) {
+              const pattern = new RegExp(`(^|\\n)###\\s+${escapeRegExp(header)}\\s*\\n([\\s\\S]*?)(?=\\n###\\s+|$)`, "i");
+              const match = markdown.match(pattern);
+              if (!match) {
+                return "";
+              }
+              return (match[2] || "").trim();
+            }
+
+            function normalizeSimple(value) {
+              return (value || "")
+                .toLowerCase()
+                .replace(/[`*_]/g, "")
+                .replace(/[\r\n]/g, " ")
+                .trim();
+            }
+
+            async function ensureLabel(name, color, description) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name });
+              } catch (error) {
+                if (error.status === 404) {
+                  await github.rest.issues.createLabel({ owner, repo, name, color, description });
+                } else {
+                  throw error;
+                }
+              }
+            }
+
+            async function removeLabel(name) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+              }
+            }
+
+            async function upsertBotComment(bodyText) {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number,
+                per_page: 100
+              });
+
+              const existing = comments.find((comment) =>
+                (comment.user?.type === "Bot" || comment.user?.login === "github-actions[bot]") &&
+                (comment.body || "").includes(marker)
+              );
+
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: existing.id,
+                  body: bodyText
+                });
+                return;
+              }
+
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: bodyText });
+            }
+
+            const typeLabels = ["type:bug", "type:feature", "type:docs"];
+            const areaLabels = [
+              "area:shared",
+              "area:copart-scraper-mcp",
+              "area:iaai-scraper-mcp",
+              "area:docs",
+              "area:infra",
+              "area:unknown"
+            ];
+            const severityLabels = ["severity:critical", "severity:high", "severity:medium", "severity:low"];
+            const priorityLabels = ["priority:p1", "priority:p2", "priority:p3"];
+
+            const labelPalette = {
+              "type:bug": ["d73a4a", "Bug report"],
+              "type:feature": ["0e8a16", "Feature request"],
+              "type:docs": ["0075ca", "Documentation change"],
+              "area:shared": ["5319e7", "Shared package"],
+              "area:copart-scraper-mcp": ["1d76db", "Copart scraper package"],
+              "area:iaai-scraper-mcp": ["0052cc", "IAAI scraper package"],
+              "area:docs": ["0366d6", "Documentation"],
+              "area:infra": ["6f42c1", "Infrastructure"],
+              "area:unknown": ["d4c5f9", "Unknown area"],
+              "severity:critical": ["b60205", "Critical severity"],
+              "severity:high": ["d93f0b", "High severity"],
+              "severity:medium": ["fbca04", "Medium severity"],
+              "severity:low": ["c2e0c6", "Low severity"],
+              "priority:p1": ["b60205", "Top priority"],
+              "priority:p2": ["d93f0b", "Required priority"],
+              "priority:p3": ["0e8a16", "Nice-to-have priority"],
+              "status:triaged": ["1f883d", "Issue has been triaged"],
+              "status:ready-for-triage": ["bfd4f2", "Issue intake complete and ready for triage"],
+              "needs-human-triage": ["fef2c0", "Issue requires human triage review"],
+              "duplicate:suspect": ["cccccc", "Potential duplicate issue"],
+              "triage:owner-suggested": ["bfdadc", "Owner suggestion has been posted"],
+            };
+
+            for (const [name, [color, description]] of Object.entries(labelPalette)) {
+              await ensureLabel(name, color, description);
+            }
+
+            const combined = `${title}\n${body}`.toLowerCase();
+
+            let type = "type:bug";
+            if ([...currentLabels].some((name) => typeLabels.includes(name))) {
+              type = [...currentLabels].find((name) => typeLabels.includes(name));
+            } else if (title.startsWith("feat:") || combined.includes("feature request")) {
+              type = "type:feature";
+            } else if (title.startsWith("docs:") || combined.includes("documentation")) {
+              type = "type:docs";
+            }
+
+            const areaRaw = normalizeSimple(extractSection(body, "Component area"));
+            const severityRaw = normalizeSimple(extractSection(body, "Severity"));
+            const priorityRaw = normalizeSimple(extractSection(body, "Priority"));
+
+            const areaMap = {
+              "shared": "area:shared",
+              "copart-scraper-mcp": "area:copart-scraper-mcp",
+              "iaai-scraper-mcp": "area:iaai-scraper-mcp",
+              "docs": "area:docs",
+              "infra": "area:infra",
+              "unknown": "area:unknown"
+            };
+
+            const severityMap = {
+              "critical": "severity:critical",
+              "high": "severity:high",
+              "medium": "severity:medium",
+              "low": "severity:low"
+            };
+
+            const priorityMap = {
+              "p1": "priority:p1",
+              "p2": "priority:p2",
+              "p3": "priority:p3"
+            };
+
+            let area = areaMap[areaRaw] || "";
+            let severity = severityMap[severityRaw] || "";
+            let priority = priorityMap[priorityRaw] || "";
+            let lowConfidence = false;
+
+            if (!area) {
+              if (combined.includes("packages/shared") || combined.includes("shared")) {
+                area = "area:shared";
+              } else if (combined.includes("copart")) {
+                area = "area:copart-scraper-mcp";
+              } else if (combined.includes("iaai")) {
+                area = "area:iaai-scraper-mcp";
+              } else if (combined.includes("workflow") || combined.includes("github actions") || combined.includes("ci")) {
+                area = "area:infra";
+              } else if (combined.includes("readme") || combined.includes("docs")) {
+                area = "area:docs";
+              } else {
+                area = "area:unknown";
+              }
+              lowConfidence = true;
+            }
+
+            if (!severity) {
+              if (combined.includes("production down") || combined.includes("data loss") || combined.includes("security")) {
+                severity = "severity:critical";
+              } else if (combined.includes("regression") || combined.includes("broken") || combined.includes("fails")) {
+                severity = "severity:high";
+              } else if (combined.includes("minor") || combined.includes("typo")) {
+                severity = "severity:low";
+              } else {
+                severity = "severity:medium";
+              }
+              lowConfidence = true;
+            }
+
+            if (!priority) {
+              priority = severity === "severity:critical" ? "priority:p1" : severity === "severity:high" ? "priority:p2" : "priority:p3";
+              lowConfidence = true;
+            }
+
+            for (const label of typeLabels) {
+              if (label !== type) await removeLabel(label);
+            }
+            for (const label of areaLabels) {
+              if (label !== area) await removeLabel(label);
+            }
+            for (const label of severityLabels) {
+              if (label !== severity) await removeLabel(label);
+            }
+            for (const label of priorityLabels) {
+              if (label !== priority) await removeLabel(label);
+            }
+
+            await removeLabel("status:ready-for-triage");
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number,
+              labels: [type, area, severity, priority, "status:triaged", "triage:owner-suggested"]
+            });
+
+            if (lowConfidence) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: ["needs-human-triage"] });
+            } else {
+              await removeLabel("needs-human-triage");
+            }
+
+            const areaOwners = {
+              "area:shared": ["@mannyraji"],
+              "area:copart-scraper-mcp": ["@mannyraji"],
+              "area:iaai-scraper-mcp": ["@mannyraji"],
+              "area:docs": ["@mannyraji"],
+              "area:infra": ["@mannyraji"],
+              "area:unknown": ["@mannyraji"]
+            };
+            const owners = areaOwners[area] || ["@mannyraji"];
+
+            function tokenize(value) {
+              return new Set((value || "")
+                .toLowerCase()
+                .replace(/[^a-z0-9\s]/g, " ")
+                .split(/\s+/)
+                .filter((token) => token.length > 3));
+            }
+
+            function scoreSimilarity(a, b) {
+              if (!a.size || !b.size) return 0;
+              let overlap = 0;
+              for (const token of a) {
+                if (b.has(token)) overlap += 1;
+              }
+              return overlap / Math.max(a.size, b.size);
+            }
+
+            const titleTokens = tokenize(title);
+            const query = `repo:${owner}/${repo} is:issue in:title ${title.split(/\s+/).slice(0, 6).join(" ")}`;
+            const search = await github.rest.search.issuesAndPullRequests({ q: query, per_page: 10 });
+
+            const candidates = (search.data.items || [])
+              .filter((item) => item.number !== issue_number && !item.pull_request)
+              .map((item) => {
+                const score = scoreSimilarity(titleTokens, tokenize(item.title));
+                return { item, score };
+              })
+              .filter((entry) => entry.score >= 0.3)
+              .sort((a, b) => b.score - a.score)
+              .slice(0, 3);
+
+            if (candidates.length > 0) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: ["duplicate:suspect"] });
+            } else {
+              await removeLabel("duplicate:suspect");
+            }
+
+            const duplicateSection = candidates.length > 0
+              ? candidates
+                  .map(({ item, score }) => `- #${item.number} (${(score * 100).toFixed(0)}% match): ${item.title}`)
+                  .join("\n")
+              : "- No strong duplicate candidates found.";
+
+            const commentBody = [
+              marker,
+              "## Auto Triage Summary",
+              "",
+              `- Type: ${type}`,
+              `- Area: ${area}`,
+              `- Severity: ${severity}`,
+              `- Priority: ${priority}`,
+              `- Owner suggestion: ${owners.join(", ")}`,
+              `- Confidence: ${lowConfidence ? "low (human review requested)" : "high"}`,
+              "",
+              "### Duplicate candidates",
+              duplicateSection
+            ].join("\n");
+
+            await upsertBotComment(commentBody);
