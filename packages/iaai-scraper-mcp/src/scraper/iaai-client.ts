@@ -255,96 +255,105 @@ export class IaaiClient {
       }
     }
 
-    // 3. Fetch CDN URLs via page context if not fully cached
-    let page: import('playwright').Page | null = null;
-    let sessionExpired = false;
-    try {
-      const p = await this.browser.getPage();
-      page = p;
-      const interceptor = new IaaiInterceptor();
-      interceptor.attach(p);
+    // 3. Fetch CDN URLs via page context. Re-auths once on session expiry.
+    const fetchUrls = async (): Promise<{ urls: string[]; sessionExpired: boolean }> => {
+      let page: import('playwright').Page | null = null;
+      try {
+        const p = await this.browser.getPage();
+        page = p;
+        const interceptor = new IaaiInterceptor();
+        interceptor.attach(p);
 
-      const url = `${BASE_URL}/VehicleDetail/${stockNumber}`;
+        const url = `${BASE_URL}/VehicleDetail/${stockNumber}`;
 
-      // Call RateLimiter.acquire() before navigation
-      if (this.rateLimiter) await this.rateLimiter.acquire();
+        // Call RateLimiter.acquire() before navigation
+        if (this.rateLimiter) await this.rateLimiter.acquire();
 
-      await p.goto(url, { waitUntil: 'networkidle', timeout: NAV_TIMEOUT });
+        await p.goto(url, { waitUntil: 'networkidle', timeout: NAV_TIMEOUT });
 
-      const pageUrl = p.url();
-      const content = await p.content();
+        const pageUrl = p.url();
+        const content = await p.content();
 
-      if (isCaptchaPage(pageUrl, content)) {
-        throw new CaptchaError('IAAI CAPTCHA detected fetching images');
-      }
-
-      // Detect session expiry (redirect to login)
-      if (isLoginPage(pageUrl)) {
-        sessionExpired = true;
-        throw new ScraperError('Session expired — redirected to login', 'SCRAPER_ERROR');
-      }
-
-      await randomDelay(500, 1500);
-
-      const interceptedRaw = interceptor.getListing();
-      if (interceptedRaw) {
-        imageUrls = extractImageUrls(interceptedRaw);
-      }
-
-      if (imageUrls.length === 0) {
-        const pageJson = await this.extractPageJson(p);
-        if (pageJson) {
-          const raw = parseListingDetail(pageJson);
-          imageUrls = extractImageUrls(raw);
+        if (isCaptchaPage(pageUrl, content)) {
+          throw new CaptchaError('IAAI CAPTCHA detected fetching images');
         }
-      }
 
-      if (this.rateLimiter) this.rateLimiter.resetBackoff();
-    } catch (err) {
-      if (err instanceof CaptchaError) throw err;
-      if (err instanceof RateLimitError) throw err;
+        // Detect session expiry (redirect to login)
+        if (isLoginPage(pageUrl)) {
+          return { urls: [], sessionExpired: true };
+        }
 
-      // Re-authenticate once on session expiry
-      if (sessionExpired) {
-        const email = process.env['IAAI_EMAIL'];
-        const password = process.env['IAAI_PASSWORD'];
-        if (email && password) {
-          try {
-            await this.browser.authenticate(email, password);
-          } catch {
-            // Auth failed — fall through to partial result
+        await randomDelay(500, 1500);
+
+        let urls: string[] = [];
+        const interceptedRaw = interceptor.getListing();
+        if (interceptedRaw) {
+          urls = extractImageUrls(interceptedRaw);
+        }
+
+        if (urls.length === 0) {
+          const pageJson = await this.extractPageJson(p);
+          if (pageJson) {
+            const raw = parseListingDetail(pageJson);
+            urls = extractImageUrls(raw);
           }
         }
 
-        // Retry once after re-auth
-        if (imageUrls.length === 0) {
-          const images = await this.buildImageEntries(imageUrls, maxImages, imageTypes);
-          return {
-            data: { stock_number: stockNumber, images },
-            cached: false,
-            stale: false,
-            cachedAt: null,
-            partial: true,
-          };
-        }
+        if (this.rateLimiter) this.rateLimiter.resetBackoff();
+        return { urls, sessionExpired: false };
+      } finally {
+        if (page) await page.close().catch(() => {});
       }
+    };
 
-      if (imageUrls.length === 0) {
-        throw new ScraperError(
-          err instanceof Error ? err.message : 'Unknown scraper error',
-          'SCRAPER_ERROR',
-          false
-        );
-      }
-    } finally {
-      if (page) await page.close().catch(() => {});
+    let fetchResult: { urls: string[]; sessionExpired: boolean };
+    try {
+      fetchResult = await fetchUrls();
+    } catch (err) {
+      if (err instanceof CaptchaError || err instanceof RateLimitError) throw err;
+      throw new ScraperError(
+        err instanceof Error ? err.message : 'Unknown scraper error',
+        'SCRAPER_ERROR',
+        false
+      );
     }
+
+    // Re-authenticate once on session expiry, then retry
+    if (fetchResult.sessionExpired) {
+      const email = process.env['IAAI_EMAIL'];
+      const password = process.env['IAAI_PASSWORD'];
+      if (email && password) {
+        try {
+          await this.browser.authenticate(email, password);
+          // Retry navigation after successful re-auth
+          try {
+            fetchResult = await fetchUrls();
+          } catch (retryErr) {
+            console.warn(
+              '[IaaiClient.getImages] Retry after re-auth failed:',
+              retryErr instanceof Error ? retryErr.message : retryErr
+            );
+            fetchResult = { urls: [], sessionExpired: false };
+          }
+        } catch (authErr) {
+          console.warn(
+            '[IaaiClient.getImages] Re-authentication failed:',
+            authErr instanceof Error ? authErr.message : authErr
+          );
+          fetchResult = { urls: [], sessionExpired: false };
+        }
+      } else {
+        fetchResult = { urls: [], sessionExpired: false };
+      }
+    }
+
+    imageUrls = fetchResult.urls;
 
     // 4. sharp pipeline → disk cache write
     const images = await this.buildImageEntries(imageUrls, maxImages, imageTypes);
     const expectedCount = imageUrls.length;
     const fetchedCount = images.filter((img) => img.base64 !== null).length;
-    const partial = fetchedCount < expectedCount;
+    const partial = imageUrls.length === 0 || fetchedCount < expectedCount;
 
     return {
       data: { stock_number: stockNumber, images },

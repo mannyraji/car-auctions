@@ -85,10 +85,7 @@ export class IaaiInterceptor {
    */
   interceptSearch(page: Page, _params: IaaiSearchParams): Promise<IaaiSearchPayload | null> {
     return new Promise<IaaiSearchPayload | null>((resolve) => {
-      const timer = setTimeout(() => {
-        page.removeAllListeners('response');
-        resolve(null);
-      }, INTERCEPT_TIMEOUT_MS);
+      let timer: ReturnType<typeof setTimeout>;
 
       const handler = (response: Response): void => {
         const url = response.url();
@@ -112,6 +109,10 @@ export class IaaiInterceptor {
       };
 
       page.on('response', handler);
+      timer = setTimeout(() => {
+        page.removeListener('response', handler);
+        resolve(null);
+      }, INTERCEPT_TIMEOUT_MS);
     });
   }
 
@@ -120,10 +121,7 @@ export class IaaiInterceptor {
    */
   interceptListing(page: Page, _stockNumber: string): Promise<IaaiRawStockData | null> {
     return new Promise<IaaiRawStockData | null>((resolve) => {
-      const timer = setTimeout(() => {
-        page.removeAllListeners('response');
-        resolve(null);
-      }, INTERCEPT_TIMEOUT_MS);
+      let timer: ReturnType<typeof setTimeout>;
 
       const handler = (response: Response): void => {
         const url = response.url();
@@ -142,6 +140,10 @@ export class IaaiInterceptor {
       };
 
       page.on('response', handler);
+      timer = setTimeout(() => {
+        page.removeListener('response', handler);
+        resolve(null);
+      }, INTERCEPT_TIMEOUT_MS);
     });
   }
 
@@ -150,10 +152,7 @@ export class IaaiInterceptor {
    */
   interceptSold(page: Page, _params: IaaiSoldParams): Promise<IaaiSearchPayload | null> {
     return new Promise<IaaiSearchPayload | null>((resolve) => {
-      const timer = setTimeout(() => {
-        page.removeAllListeners('response');
-        resolve(null);
-      }, INTERCEPT_TIMEOUT_MS);
+      let timer: ReturnType<typeof setTimeout>;
 
       const handler = (response: Response): void => {
         const url = response.url();
@@ -177,6 +176,10 @@ export class IaaiInterceptor {
       };
 
       page.on('response', handler);
+      timer = setTimeout(() => {
+        page.removeListener('response', handler);
+        resolve(null);
+      }, INTERCEPT_TIMEOUT_MS);
     });
   }
 }

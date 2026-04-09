@@ -226,6 +226,8 @@ export class IaaiSqliteCache {
   ]);
 
   watchlistUpdate(lotNumber: string, updates: Partial<WatchlistEntry>): void {
+    // WATCHLIST_COLUMNS allowlist ensures only valid column names can appear in
+    // the SET clause — no user-supplied strings are used to construct SQL.
     const safeEntries = Object.entries(updates).filter(
       ([k]) => k !== 'lot_number' && IaaiSqliteCache.WATCHLIST_COLUMNS.has(k)
     );
