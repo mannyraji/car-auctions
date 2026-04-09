@@ -117,6 +117,23 @@ export interface WatchlistEntry {
   notes: string | null;
 }
 
+/** Watchlist history entry recording a detected field change. */
+export interface WatchlistHistoryEntry {
+  id: number;
+  lot_number: string;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  detected_at: string;
+}
+
+/** Params for adding a lot to the watchlist. */
+export interface WatchlistAddParams {
+  lot_number: string;
+  bid_threshold?: number;
+  notes?: string;
+}
+
 /** Persisted IAAI session state used for auth restoration. */
 export interface IaaiSession {
   cookies: Array<{
