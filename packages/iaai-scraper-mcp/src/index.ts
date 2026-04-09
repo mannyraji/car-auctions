@@ -43,11 +43,19 @@ async function main(): Promise<void> {
   // 4 & 6. Build the MCP server and start listening on the selected transport
   await createServer({ client, cache, imageCache }, transport);
 
-  // Graceful shutdown
+  // Graceful shutdown — guard ensures cleanup runs at most once
+  let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
-    await browser.close();
-    cache.close();
-    process.exit(0);
+    if (shuttingDown) return;
+    shuttingDown = true;
+    try {
+      await browser.close();
+      cache.close();
+      process.exit(0);
+    } catch (err) {
+      console.error('Error during shutdown:', err);
+      process.exit(1);
+    }
   };
   process.on('SIGINT', () => {
     shutdown().catch(console.error);
