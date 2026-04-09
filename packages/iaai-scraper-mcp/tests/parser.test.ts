@@ -490,11 +490,15 @@ describe('extractImageUrls', () => {
   });
 
   it('extracts from search fixture first item (array format)', () => {
+    // Fixture: iaai-search-response.json items[0] has 3 imageUrls as an array of strings
     const item = (searchFixture as { items: unknown[] }).items[0] as Parameters<
       typeof extractImageUrls
     >[0];
     const urls = extractImageUrls(item);
     expect(urls).toHaveLength(3);
+    expect(urls[0]).toBe('https://vg.iaai.com/A12345678_1_lrg.jpg');
+    expect(urls[1]).toBe('https://vg.iaai.com/A12345678_2_lrg.jpg');
+    expect(urls[2]).toBe('https://vg.iaai.com/A12345678_3_lrg.jpg');
   });
 
   it('extracts from listing fixture (array format)', () => {
