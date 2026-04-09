@@ -137,27 +137,7 @@ export interface IaaiSession {
 }
 
 /** Runtime config shape loaded from config/default.json. */
-export interface IaaiConfig {
-  rateLimit: {
-    requestsPerSecond: number;
-    maxConcurrent: number;
-    backoffMultiplier: number;
-    maxBackoffMs: number;
-    dailyCap: number;
-  };
-  cache: {
-    searchTtlMinutes: number;
-    listingTtlMinutes: number;
-    imageTtlHours: number;
-    soldTtlDays: number;
-    vinTtlDays: number;
-    lruMaxEntries: number;
-  };
-  proxy: {
-    url: string | null;
-    rotateOnFailure: boolean;
-  };
-}
+export type { IaaiConfig } from '../utils/config';
 
 /** Result wrapper returned by IaaiClient methods, includes cache provenance metadata. */
 export interface ScraperResult<T> {
