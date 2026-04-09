@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, afterAll } from 'vitest';
 import { validateConfig, parseRawConfig } from '../src/utils/config.js';
 
 // We spy on console.warn to capture Option-B sanitized messages
@@ -6,6 +6,10 @@ const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
 afterEach(() => {
   warnSpy.mockClear();
+});
+
+afterAll(() => {
+  warnSpy.mockRestore();
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

@@ -53,15 +53,19 @@ async function compressImage(
 ): Promise<{ compressed: Buffer; mimeType: string }> {
   try {
     const sharp = (await import('sharp')).default;
+    let timer: ReturnType<typeof setTimeout>;
     const compressed = await Promise.race([
       sharp(buffer)
         .resize(MAX_DIMENSION, MAX_DIMENSION, { fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: JPEG_QUALITY })
         .toBuffer(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Image compression timed out')), COMPRESS_TIMEOUT_MS)
-      ),
-    ]);
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('Image compression timed out')),
+          COMPRESS_TIMEOUT_MS
+        );
+      }),
+    ]).finally(() => clearTimeout(timer));
     return { compressed, mimeType: 'image/jpeg' };
   } catch {
     return {

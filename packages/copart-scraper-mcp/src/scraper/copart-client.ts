@@ -190,9 +190,14 @@ export class CopartClient {
       interceptor.attach(p);
 
       const url = `${BASE_URL}/lot/${lotNumber}`;
-      await (this.rateLimiter
+      const response = await (this.rateLimiter
         ? this.rateLimiter.execute(() => p.goto(url, { waitUntil: 'networkidle', timeout: 30000 }))
         : p.goto(url, { waitUntil: 'networkidle', timeout: 30000 }));
+
+      if (!response) throw new ScraperError('No response from Copart images page');
+      if (response.status() === 429 || response.status() === 403) {
+        throw new RateLimitError(`HTTP ${response.status()} from Copart`, 60000);
+      }
 
       const pageUrl = p.url();
       const content = await p.content();
@@ -254,11 +259,16 @@ export class CopartClient {
       if (params.year_max) url.searchParams.set('yearTo', String(params.year_max));
       url.searchParams.set('sold', 'true');
 
-      await (this.rateLimiter
+      const response = await (this.rateLimiter
         ? this.rateLimiter.execute(() =>
             p.goto(url.toString(), { waitUntil: 'networkidle', timeout: 30000 })
           )
         : p.goto(url.toString(), { waitUntil: 'networkidle', timeout: 30000 }));
+
+      if (!response) throw new ScraperError('No response from Copart sold history page');
+      if (response.status() === 429 || response.status() === 403) {
+        throw new RateLimitError(`HTTP ${response.status()} from Copart`, 60000);
+      }
 
       const pageUrl = p.url();
       const content = await p.content();

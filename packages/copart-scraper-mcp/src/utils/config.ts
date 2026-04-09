@@ -127,8 +127,9 @@ export function loadConfigFile(): CopartConfig {
     const here = fileURLToPath(import.meta.url);
     const configPath = path.resolve(path.dirname(here), '..', '..', 'config', 'default.json');
     raw = readFileSync(configPath, 'utf8');
-  } catch {
-    // File missing or unreadable — silently use defaults
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : 'unknown error';
+    console.warn(`[config] Could not read default.json (${reason}) — using defaults`);
     return DEFAULT_CONFIG;
   }
 
