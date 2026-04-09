@@ -38,11 +38,11 @@ export interface IaaiRawStockData {
   driveType?: string;
   fuelType?: string;
   cylinders?: string | number;
-  currentBid?: number;
-  buyNowPrice?: number;
-  saleDate?: string;
+  currentBid?: number | null;
+  buyNowPrice?: number | null;
+  saleDate?: string | null;
   saleStatus?: string;
-  finalBid?: number;
+  finalBid?: number | null;
   branchName?: string;
   branchZip?: string;
   latitude?: number;
