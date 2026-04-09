@@ -44,7 +44,7 @@ export interface IaaiRawStockData {
   saleStatus?: string;
   finalBid?: number | null;
   branchName?: string;
-  branchZip?: string;
+  branchZip?: string | number;
   latitude?: number;
   longitude?: number;
   imageUrls?: Record<string, unknown> | string[];
