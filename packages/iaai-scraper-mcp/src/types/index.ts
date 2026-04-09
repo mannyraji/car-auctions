@@ -38,25 +38,18 @@ export interface IaaiRawStockData {
   driveType?: string;
   fuelType?: string;
   cylinders?: string | number;
-  currentBid?: number | null;
-  buyNowPrice?: number | null;
-  saleDate?: string | null;
+  currentBid?: number;
+  buyNowPrice?: number;
+  saleDate?: string;
   saleStatus?: string;
-  finalBid?: number | null;
+  finalBid?: number;
   branchName?: string;
-  branchZip?: string | number;
+  branchZip?: string;
   latitude?: number;
   longitude?: number;
   imageUrls?: Record<string, unknown> | string[];
   detailUrl?: string;
   seller?: string;
-  conditionGradeDisplay?: string;
-  lossType?: string;
-  highlights?: string[];
-  startCode?: string;
-  bodyStyle?: string;
-  series?: string;
-  runnable?: boolean | string;
   [key: string]: unknown;
 }
 
@@ -73,20 +66,6 @@ export interface IaaiSoldEntry {
   damage: string;
   titleType: string;
   odometer: number | null;
-}
-
-/** Sold history response with computed aggregate metrics. */
-export interface SoldHistoryResponse {
-  lots: IaaiSoldEntry[];
-  aggregates: {
-    count: number;
-    avg_final_bid: number;
-    median_final_bid: number;
-    price_range: {
-      low: number;
-      high: number;
-    };
-  };
 }
 
 /** Sold history query params */
@@ -109,35 +88,6 @@ export interface IaaiImageEntry {
   category: string;
   base64: string | null;
 }
-
-/** Watchlist row for IAAI lots persisted in SQLite. */
-export interface WatchlistEntry {
-  lot_number: string;
-  source: 'iaai';
-  added_at: string;
-  bid_threshold: number | null;
-  last_checked_at: string | null;
-  last_bid: number | null;
-  last_status: string | null;
-  notes: string | null;
-}
-
-/** Persisted IAAI session state used for auth restoration. */
-export interface IaaiSession {
-  cookies: Array<{
-    name: string;
-    value: string;
-    domain: string;
-    path: string;
-    expires?: number;
-    [key: string]: unknown;
-  }>;
-  localStorage: Record<string, Record<string, string>>;
-  savedAt: string;
-}
-
-/** Runtime config shape loaded from config/default.json. */
-export type { IaaiConfig } from '../utils/config';
 
 /** Result wrapper returned by IaaiClient methods, includes cache provenance metadata. */
 export interface ScraperResult<T> {
