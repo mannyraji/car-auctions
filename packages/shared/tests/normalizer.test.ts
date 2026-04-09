@@ -98,6 +98,7 @@ describe('normalizeIaai', () => {
     expect(listing.cylinders).toBe(4);
     expect(listing.current_bid).toBe(2400);
     expect(listing.location).toBe('Houston North');
+    expect(listing.location_zip).toBe('77060');
     expect(listing.detail_url).toBe('https://www.iaai.com/VehicleDetail/A12345678');
     expect(listing.seller).toBe('Allstate Insurance');
     expect(listing.sale_status).toBe('UPCOMING');
@@ -124,10 +125,10 @@ describe('normalizeIaai', () => {
     }
   });
 
-  it('maps unknown title code to "Unknown" with a warning', () => {
+  it('maps unknown title code to "Unknown (XX)" with a warning', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const listing = normalizeIaai({ titleCode: 'XX' } as IaaiRawListing);
-    expect(listing.title_type).toBe('Unknown');
+    expect(listing.title_type).toBe('Unknown (XX)');
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Unknown title code'));
     warnSpy.mockRestore();
   });

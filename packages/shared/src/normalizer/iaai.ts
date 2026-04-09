@@ -60,6 +60,7 @@ export function normalizeIaai(raw: IaaiRawListing): AuctionListing {
     sale_status: String(raw.saleStatus ?? 'UPCOMING'),
     final_bid: raw.finalBid != null ? Number(raw.finalBid) : null,
     location: String(raw.branchName ?? ''),
+    location_zip: raw.branchZip != null ? String(raw.branchZip) : null,
     latitude: raw.latitude != null ? Number(raw.latitude) : null,
     longitude: raw.longitude != null ? Number(raw.longitude) : null,
     image_url: imageUrls.length > 0 ? imageUrls[0] : null,
@@ -75,8 +76,8 @@ function resolveTitleType(code: string | null): string {
   if (code == null) return 'Unknown';
   const mapped = TITLE_CODE_MAP[code.toUpperCase()];
   if (mapped) return mapped;
-  console.warn(`[normalizeIaai] Unknown title code: "${code}" — defaulting to "Unknown"`);
-  return 'Unknown';
+  console.warn(`[normalizeIaai] Unknown title code: "${code}" — defaulting to "Unknown (${code})"`);
+  return `Unknown (${code})`;
 }
 
 function parseOdometer(value: string | number | undefined): number | null {
