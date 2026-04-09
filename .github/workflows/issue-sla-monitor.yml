@@ -1,0 +1,225 @@
+name: Issue SLA Monitor
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Monitor SLA targets and escalate breaches
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const firstResponseHours = {
+              "severity:critical": 4,
+              "severity:high": 24,
+              "severity:medium": 72,
+              "severity:low": 120
+            };
+
+            const resolutionHours = {
+              "severity:critical": 24,
+              "severity:high": 24 * 7,
+              "severity:medium": 24 * 14,
+              "severity:low": 24 * 30
+            };
+
+            const managedLabels = {
+              "sla:breached-first-response": ["b60205", "First response SLA has been breached"],
+              "sla:breached-resolution": ["d93f0b", "Resolution SLA has been breached"],
+              "escalation:critical": ["5319e7", "Critical SLA escalation required"]
+            };
+
+            async function ensureLabel(name, color, description) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name });
+              } catch (error) {
+                if (error.status === 404) {
+                  await github.rest.issues.createLabel({ owner, repo, name, color, description });
+                } else {
+                  throw error;
+                }
+              }
+            }
+
+            for (const [name, [color, description]] of Object.entries(managedLabels)) {
+              await ensureLabel(name, color, description);
+            }
+
+            async function addLabel(issue_number, name) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [name] });
+            }
+
+            async function removeLabel(issue_number, name) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+              }
+            }
+
+            async function upsertMarkerComment(issue_number, marker, bodyText) {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number,
+                per_page: 100
+              });
+
+              const existing = comments.find((comment) =>
+                (comment.user?.type === "Bot" || comment.user?.login === "github-actions[bot]") &&
+                (comment.body || "").includes(marker)
+              );
+
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: existing.id,
+                  body: bodyText
+                });
+                return;
+              }
+
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: bodyText });
+            }
+
+            function getSeverity(issue) {
+              const names = (issue.labels || []).map((label) => typeof label === "string" ? label : label.name);
+              return ["severity:critical", "severity:high", "severity:medium", "severity:low"].find((label) => names.includes(label)) || "severity:medium";
+            }
+
+            function isHumanResponder(commentUser, authorLogin) {
+              const login = commentUser?.login || "";
+              if (!login) {
+                return false;
+              }
+              if (login === authorLogin) {
+                return false;
+              }
+              return !login.endsWith("[bot]");
+            }
+
+            const now = Date.now();
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: "open",
+              per_page: 100
+            });
+
+            let firstResponseBreaches = 0;
+            let resolutionBreaches = 0;
+            let criticalEscalations = 0;
+
+            for (const issue of openIssues) {
+              if (issue.pull_request) {
+                continue;
+              }
+
+              const issue_number = issue.number;
+              const severity = getSeverity(issue);
+              const createdAt = new Date(issue.created_at).getTime();
+              const ageHours = (now - createdAt) / (1000 * 60 * 60);
+
+              const firstResponseTarget = firstResponseHours[severity] || 72;
+              const resolutionTarget = resolutionHours[severity] || 24 * 14;
+
+              let hasMaintainerResponse = false;
+              if (ageHours > firstResponseTarget) {
+                const comments = await github.paginate(github.rest.issues.listComments, {
+                  owner,
+                  repo,
+                  issue_number,
+                  per_page: 100
+                });
+                hasMaintainerResponse = comments.some((comment) =>
+                  isHumanResponder(comment.user, issue.user?.login || "")
+                );
+              }
+
+              const firstResponseBreached = ageHours > firstResponseTarget && !hasMaintainerResponse;
+              const resolutionBreached = ageHours > resolutionTarget;
+
+              if (firstResponseBreached) {
+                firstResponseBreaches += 1;
+                await addLabel(issue_number, "sla:breached-first-response");
+                await upsertMarkerComment(
+                  issue_number,
+                  "<!-- sla-monitor:first-response -->",
+                  [
+                    "<!-- sla-monitor:first-response -->",
+                    "## SLA Alert: First Response Breach",
+                    "",
+                    `This issue has exceeded the first-response target for ${severity}.`,
+                    `- Open duration: ${ageHours.toFixed(1)} hours`,
+                    `- Target: ${firstResponseTarget} hours`,
+                    "",
+                    "Please add a maintainer response to clear this alert."
+                  ].join("\n")
+                );
+              } else {
+                await removeLabel(issue_number, "sla:breached-first-response");
+              }
+
+              if (resolutionBreached) {
+                resolutionBreaches += 1;
+                await addLabel(issue_number, "sla:breached-resolution");
+                await upsertMarkerComment(
+                  issue_number,
+                  "<!-- sla-monitor:resolution -->",
+                  [
+                    "<!-- sla-monitor:resolution -->",
+                    "## SLA Alert: Resolution Breach",
+                    "",
+                    `This issue has exceeded the resolution target for ${severity}.`,
+                    `- Open duration: ${ageHours.toFixed(1)} hours`,
+                    `- Target: ${resolutionTarget} hours`,
+                    "",
+                    "Please prioritize for triage or scheduling."
+                  ].join("\n")
+                );
+              } else {
+                await removeLabel(issue_number, "sla:breached-resolution");
+              }
+
+              if (resolutionBreached && severity === "severity:critical") {
+                criticalEscalations += 1;
+                await addLabel(issue_number, "escalation:critical");
+                await upsertMarkerComment(
+                  issue_number,
+                  "<!-- sla-monitor:critical-escalation -->",
+                  [
+                    "<!-- sla-monitor:critical-escalation -->",
+                    "## Critical Escalation",
+                    "",
+                    "@mannyraji this critical issue has exceeded its resolution SLA and needs immediate action."
+                  ].join("\n")
+                );
+              } else {
+                await removeLabel(issue_number, "escalation:critical");
+              }
+            }
+
+            core.summary
+              .addHeading("Issue SLA Monitor")
+              .addTable([
+                [{ data: "Metric", header: true }, { data: "Count", header: true }],
+                ["Open issues scanned", `${openIssues.filter((i) => !i.pull_request).length}`],
+                ["First-response breaches", `${firstResponseBreaches}`],
+                ["Resolution breaches", `${resolutionBreaches}`],
+                ["Critical escalations", `${criticalEscalations}`]
+              ])
+              .write();

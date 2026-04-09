@@ -1,0 +1,100 @@
+name: Bug Report
+description: Report a bug with enough detail for fast triage.
+title: 'bug: '
+labels:
+  - type:bug
+  - status:ready-for-triage
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List exact steps so maintainers can reproduce quickly.
+      placeholder: |
+        1. Go to ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Paste relevant logs, stack traces, or screenshots.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, Node version, package/workspace, and branch if relevant.
+      placeholder: macOS 14, Node 20.x, packages/iaai-scraper-mcp, branch 002-iaai-scraper-mcp
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Describe user/business impact and urgency.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component_area
+    attributes:
+      label: Component area
+      description: Which area is most impacted?
+      options:
+        - shared
+        - copart-scraper-mcp
+        - iaai-scraper-mcp
+        - docs
+        - infra
+        - unknown
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: Severity level for this issue.
+      options:
+        - critical
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: Priority level for planning.
+      options:
+        - P1
+        - P2
+        - P3
+    validations:
+      required: true
