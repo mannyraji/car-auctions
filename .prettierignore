@@ -1,8 +1,12 @@
 dist/
+build/
+coverage/
 node_modules/
 data/
 *.lock
 package-lock.json
+yarn.lock
+pnpm-lock.yaml
 # Documentation and spec files — not subject to formatting enforcement
 **/*.md
 docs/

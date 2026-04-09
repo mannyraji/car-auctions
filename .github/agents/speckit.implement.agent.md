@@ -1,5 +1,7 @@
 ---
 description: Execute the implementation plan by processing and executing all tasks defined in tasks.md
+argument-hint: "Optional: GitHub issue URL or '#N' (e.g. '#42'). Combine with phase/task filter: '#42 Phase 2'"
+tools: ['run_in_terminal', 'read_file', 'editFiles', 'search', 'github.vscode-pull-request-github/issue_fetch', 'github.vscode-pull-request-github/activePullRequest']
 ---
 
 ## User Input
@@ -9,6 +11,25 @@ $ARGUMENTS
 ```
 
 You **MUST** consider the user input before proceeding (if not empty).
+
+## GitHub Issue Context
+
+Before running prerequisite checks, resolve any GitHub issue reference in `$ARGUMENTS`:
+
+1. Scan `$ARGUMENTS` for a GitHub issue reference in any of these forms:
+   - Full URL: `https://github.com/<owner>/<repo>/issues/<N>`
+   - Shorthand: `#<N>` or bare integer `<N>` (only when `$ARGUMENTS` starts with `#` or a digit)
+2. If a reference is found:
+   - Strip the reference from `$ARGUMENTS`; retain the remainder (e.g. `"Phase 2"`) for downstream phase/task filtering.
+   - Store the issue number as `GITHUB_ISSUE_NUMBER`.
+   - Call `github-pull-request_issue_fetch` with the extracted issue number.
+   - Display the fetched issue as a context block:
+     ```
+     ### Issue Context: #{GITHUB_ISSUE_NUMBER} — {title}
+     {body}
+     ```
+   - Use this context to resolve ambiguous requirement intent throughout the outline. It does **not** override local spec artifacts.
+3. If no reference is found, or the fetch fails for any reason, set `GITHUB_ISSUE_NUMBER` to empty and continue silently.
 
 ## Pre-Execution Checks
 
@@ -86,6 +107,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **IF EXISTS**: Read contracts/ for API specifications and test requirements
    - **IF EXISTS**: Read research.md for technical decisions and constraints
    - **IF EXISTS**: Read quickstart.md for integration scenarios
+   - **IF `GITHUB_ISSUE_NUMBER` is set**: Treat the fetched issue title and body as supplemental context when interpreting tasks.md and plan.md. Use it to resolve ambiguous requirement intent — it does not override local spec artifacts.
 
 4. **Project Setup Verification**:
    - **REQUIRED**: Create/verify ignore files based on actual project setup:
@@ -137,6 +159,41 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **Task details**: ID, description, file paths, parallel markers [P]
    - **Execution flow**: Order and dependency requirements
 
+5.5. **Draft PR Creation** (GitHub only — skip entirely if the remote is not a GitHub URL):
+
+   a. Verify this is a GitHub repository:
+      ```sh
+      git config --get remote.origin.url 2>/dev/null
+      ```
+      If the remote URL does not contain `github.com`, skip this step entirely.
+
+      Verify the `gh` CLI is available before proceeding:
+      ```sh
+      command -v gh >/dev/null 2>&1
+      ```
+      If `gh` is not found, print `"gh CLI not found — skipping draft PR creation"` and skip the rest of step 5.5.
+
+   b. Check for an existing open PR on the current branch:
+      ```sh
+      gh pr view --json number,title,state 2>/dev/null
+      ```
+      - If a PR exists: store its number as `GITHUB_PR_NUMBER` and display the PR URL. Do not create a new one.
+      - If no PR exists: proceed to step c.
+
+   c. Create a draft PR:
+      - Use the issue title as the PR title when `GITHUB_ISSUE_NUMBER` is set: `feat: {issue title}`. Otherwise use `feat: {FEATURE_DIR basename}`.
+      - Compose the PR body (omit the `Closes #...` line entirely if `GITHUB_ISSUE_NUMBER` is empty):
+        ```
+        Implements {FEATURE_DIR}
+
+        Closes #{GITHUB_ISSUE_NUMBER}
+
+        ## Planned Tasks
+        {bulleted list of task IDs and descriptions from tasks.md}
+        ```
+      - Execute: `gh pr create --draft --title "..." --body "..."`
+      - Store the returned PR number as `GITHUB_PR_NUMBER` and display the PR URL.
+
 6. Execute implementation following the task plan:
    - **Phase-by-phase execution**: Complete each phase before moving to the next
    - **Respect dependencies**: Run sequential tasks in order, parallel tasks [P] can run together  
@@ -158,6 +215,14 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Provide clear error messages with context for debugging
    - Suggest next steps if implementation cannot proceed
    - **IMPORTANT** For completed tasks, make sure to mark the task off as [X] in the tasks file.
+   - **Commit linking** (when `GITHUB_ISSUE_NUMBER` is set): After each completed task group, display a recommended commit message template using the resolved issue number (e.g. `42`, not the literal string `GITHUB_ISSUE_NUMBER`):
+     - For intermediate task groups: `git commit -m "feat: [description] (Part of #{resolved issue number)"`
+     - For the final task group: `git commit -m "feat: [description] (Closes #{resolved issue number)"`
+   - **Push tasks.md progress** (advisory — do not auto-execute): After marking tasks `[X]`, recommend:
+     ```sh
+     git add {FEATURE_DIR}/tasks.md && git commit -m "chore: mark {TASK_ID} complete" && git push
+     ```
+     This keeps task progress visible to the team on the remote branch.
 
 9. Completion validation:
    - Verify all required tasks are completed
@@ -167,6 +232,39 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Report final status with summary of completed work
 
 Note: This command assumes a complete task breakdown exists in tasks.md. If tasks are incomplete or missing, suggest running `/speckit.tasks` first to regenerate the task list.
+
+9.5. **GitHub PR Summary** (skip entirely if `GITHUB_PR_NUMBER` is not set):
+
+   a. Call `github-pull-request_activePullRequest` to confirm the PR is still open and retrieve its current description.
+      - If no active PR is returned, skip steps b and c silently.
+
+   b. **Post completion comment**:
+      Compose and post a Markdown comment:
+      ```sh
+      gh pr comment {GITHUB_PR_NUMBER} --body "{comment}"
+      ```
+      Comment template:
+      ```markdown
+      ## Implementation Complete
+
+      **Feature**: {FEATURE_DIR basename}
+      **Tasks completed**: {X} / {Y}
+      **Phases run**: {comma-separated list}
+      **Key files changed**: {list of primary file paths from tasks.md}
+      **Tests**: {passed ✓ / failed ✗ / skipped —}
+      **Issue**: #{GITHUB_ISSUE_NUMBER}
+      ```
+      Omit the **Issue** line if `GITHUB_ISSUE_NUMBER` is empty.
+
+   c. **Append Implementation Summary to PR description** (idempotent):
+      - Read the current PR body from the `activePullRequest` response.
+      - If the body already contains the heading `## Implementation Summary`: skip — do not duplicate.
+      - Otherwise append the block. Write the combined body to a temp file to avoid shell escaping issues with multiline content, quotes, or backticks, then execute:
+        ```sh
+        printf '%s\n\n## Implementation Summary\n\n%s' "$existing_body" "$summary" > /tmp/pr_body_$$.md
+        gh pr edit {GITHUB_PR_NUMBER} --body-file /tmp/pr_body_$$.md
+        rm -f /tmp/pr_body_$$.md
+        ```
 
 10. **Check for extension hooks**: After completion validation, check if `.specify/extensions.yml` exists in the project root.
     - If it exists, read it and look for entries under the `hooks.after_implement` key
