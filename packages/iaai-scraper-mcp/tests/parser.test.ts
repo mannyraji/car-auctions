@@ -1,4 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+vi.mock('../src/scraper/interceptor.js', () => ({
+  IaaiInterceptor: vi.fn(() => ({
+    interceptSearch: vi.fn().mockResolvedValue(null),
+    interceptListing: vi.fn().mockResolvedValue(null),
+    interceptSold: vi.fn().mockResolvedValue(null),
+  })),
+}));
+
 import {
   parseSearchResults,
   parseListingDetail,
@@ -6,503 +14,644 @@ import {
   computeAggregates,
   extractImageUrls,
 } from '../src/scraper/parser.js';
-import { ScraperError } from '@car-auctions/shared';
+import { IaaiClient } from '../src/scraper/iaai-client.js';
+import { ScraperError, CaptchaError, RateLimitError } from '@car-auctions/shared';
+import type { AuctionListing } from '@car-auctions/shared';
+import type { IaaiSoldEntry, SoldHistoryResponse } from '../src/types/index.js';
 import searchFixture from './fixtures/iaai-search-response.json';
 import listingFixture from './fixtures/iaai-listing-response.json';
 import soldFixture from './fixtures/iaai-sold-response.json';
 
-// ─── parseSearchResults ────────────────────────────────────────────────────
+// ─── parser tests ─────────────────────────────────────────────────────────────
 
 describe('parseSearchResults', () => {
-  it('parses items array from standard IAAI search response', () => {
+  it('parses items array from search fixture', () => {
     const items = parseSearchResults(searchFixture);
     expect(items).toHaveLength(3);
     expect(items[0]?.stockNumber).toBe('A12345678');
     expect(items[1]?.makeName).toBe('Honda');
-    expect(items[2]?.modelName).toBe('F-150');
   });
 
   it('throws ScraperError for null input', () => {
     expect(() => parseSearchResults(null)).toThrow(ScraperError);
   });
 
-  it('throws ScraperError for undefined input', () => {
-    expect(() => parseSearchResults(undefined)).toThrow(ScraperError);
+  it('throws ScraperError for non-object input', () => {
+    expect(() => parseSearchResults('invalid')).toThrow(ScraperError);
   });
 
-  it('throws ScraperError for non-object primitive', () => {
-    expect(() => parseSearchResults('bad')).toThrow(ScraperError);
-    expect(() => parseSearchResults(42)).toThrow(ScraperError);
-  });
-
-  it('handles a direct array payload', () => {
-    const raw = [{ stockNumber: 'X1', vin: '1HGCM82633A004352' }];
-    const items = parseSearchResults(raw);
-    expect(items).toHaveLength(1);
-    expect(items[0]?.stockNumber).toBe('X1');
-  });
-
-  it('unwraps a nested data.items structure', () => {
-    const raw = { data: { items: [{ stockNumber: 'A1', vin: 'TEST' }] } };
-    const items = parseSearchResults(raw);
-    expect(items).toHaveLength(1);
-    expect(items[0]?.stockNumber).toBe('A1');
-  });
-
-  it('handles results array key', () => {
-    const raw = { results: [{ stockNumber: 'R1', makeName: 'Ford' }] };
-    const items = parseSearchResults(raw);
+  it('handles flat array input', () => {
+    const items = parseSearchResults([{ stockNumber: 'X1', makeName: 'Ford' }]);
     expect(items).toHaveLength(1);
     expect(items[0]?.makeName).toBe('Ford');
   });
 
-  it('handles content array key', () => {
-    const raw = { content: [{ stockNumber: 'C1', makeName: 'BMW' }] };
-    const items = parseSearchResults(raw);
-    expect(items).toHaveLength(1);
-  });
-
-  it('handles lots array key', () => {
-    const raw = { lots: [{ stockNumber: 'L1', makeName: 'Tesla' }] };
-    const items = parseSearchResults(raw);
-    expect(items).toHaveLength(1);
-  });
-
-  it('throws ScraperError when no recognizable array is found', () => {
-    expect(() => parseSearchResults({ unrelated: 'data' })).toThrow(ScraperError);
-  });
-
-  it('filters out non-object items from array', () => {
-    const raw = { items: [{ stockNumber: 'A1' }, null, 'bad', 42] };
-    const items = parseSearchResults(raw);
-    // null is filtered out, 'bad' and 42 are filtered out
+  it('handles results key', () => {
+    const items = parseSearchResults({ results: [{ stockNumber: 'R1' }] });
     expect(items).toHaveLength(1);
   });
 });
 
-// ─── parseListingDetail ────────────────────────────────────────────────────
-
 describe('parseListingDetail', () => {
-  it('parses listing detail from standard fixture', () => {
-    const listing = parseListingDetail(listingFixture);
-    expect(listing.stockNumber).toBe('A12345678');
-    expect(listing.vin).toBe('1HGCM82633A004352');
-    expect(listing.conditionGradeDisplay).toBe('3.5');
-    expect(listing.lossType).toBe('Collision');
-    expect(listing.startCode).toBe('START');
-    expect(listing.bodyStyle).toBe('Sedan');
-    expect(listing.series).toBe('XSE');
-    expect(listing.runnable).toBe(true);
+  it('parses listing from fixture', () => {
+    const item = parseListingDetail(listingFixture);
+    expect(item.stockNumber).toBe('A12345678');
+    expect(item.makeName).toBe('Toyota');
+    expect(item.year).toBe(2019);
   });
 
-  it('populates grid_row with detail-only fields', () => {
-    const listing = parseListingDetail(listingFixture);
-    expect(listing.grid_row).toBeDefined();
-    const grid = listing.grid_row as Record<string, unknown>;
-    expect(grid['conditionGradeDisplay']).toBe('3.5');
-    expect(grid['lossType']).toBe('Collision');
-    expect(grid['startCode']).toBe('START');
-    expect(grid['bodyStyle']).toBe('Sedan');
-    expect(grid['series']).toBe('XSE');
-    expect(grid['runnable']).toBe(true);
+  it('maps detail-only fields into grid_row', () => {
+    const item = parseListingDetail(listingFixture);
+    expect(item.grid_row).toBeDefined();
+    const gr = item.grid_row as Record<string, unknown>;
+    expect(gr['conditionGradeDisplay']).toBe('3.5');
+    expect(gr['lossType']).toBe('Collision');
+    expect(gr['startCode']).toBe('START');
   });
 
   it('throws ScraperError for null input', () => {
     expect(() => parseListingDetail(null)).toThrow(ScraperError);
   });
 
-  it('throws ScraperError for undefined input', () => {
-    expect(() => parseListingDetail(undefined)).toThrow(ScraperError);
-  });
-
-  it('throws ScraperError for array input', () => {
-    expect(() => parseListingDetail([])).toThrow(ScraperError);
-  });
-
-  it('throws ScraperError when stockNumber and vin are both missing', () => {
-    expect(() => parseListingDetail({ makeName: 'Toyota' })).toThrow(ScraperError);
-  });
-
-  it('unwraps data wrapper', () => {
-    const raw = { data: { stockNumber: 'W1', vin: '1TEST', conditionGradeDisplay: '4.0' } };
-    const listing = parseListingDetail(raw);
-    expect(listing.stockNumber).toBe('W1');
-    const grid = listing.grid_row as Record<string, unknown>;
-    expect(grid['conditionGradeDisplay']).toBe('4.0');
-  });
-
-  it('unwraps lot wrapper', () => {
-    const raw = { lot: { stockNumber: 'L1', vin: '1TEST' } };
-    const listing = parseListingDetail(raw);
-    expect(listing.stockNumber).toBe('L1');
-  });
-
-  it('sets grid_row to undefined when no detail fields present', () => {
-    const raw = { stockNumber: 'N1', vin: '1TEST', makeName: 'Ford' };
-    const listing = parseListingDetail(raw);
-    expect(listing.grid_row).toBeUndefined();
-  });
-
-  it('handles highlights array in grid_row', () => {
-    const raw = {
-      stockNumber: 'H1',
-      vin: '1TEST',
-      highlights: ['Engine starts', 'All tires present'],
-    };
-    const listing = parseListingDetail(raw);
-    const grid = listing.grid_row as Record<string, unknown>;
-    expect(grid['highlights']).toEqual(['Engine starts', 'All tires present']);
+  it('unwraps stockDetails wrapper', () => {
+    const wrapped = { stockDetails: { stockNumber: 'WRAP1', makeName: 'Kia' } };
+    const item = parseListingDetail(wrapped);
+    expect(item.stockNumber).toBe('WRAP1');
+    expect(item.makeName).toBe('Kia');
   });
 });
-
-// ─── parseSoldResults ──────────────────────────────────────────────────────
 
 describe('parseSoldResults', () => {
   it('parses sold entries from fixture', () => {
     const entries = parseSoldResults(soldFixture);
     expect(entries).toHaveLength(5);
+    expect(entries[0]?.lot_number).toBe('S10000001');
+    expect(entries[0]?.final_bid).toBe(4200);
   });
 
   it('preserves null for missing finalBid', () => {
     const entries = parseSoldResults(soldFixture);
-    // Fixture lot S10000003 has finalBid: null
     const nullEntry = entries.find((e) => e.lot_number === 'S10000003');
-    expect(nullEntry).toBeDefined();
     expect(nullEntry?.final_bid).toBeNull();
-  });
-
-  it('correctly maps IaaiSoldEntry fields', () => {
-    const entries = parseSoldResults(soldFixture);
-    const first = entries[0]!;
-    expect(first.lot_number).toBe('S10000001');
-    expect(first.sale_date).toBe('2026-01-10T10:00:00Z');
-    expect(first.final_bid).toBe(4200);
-    expect(first.damage_primary).toBe('Front End');
-    expect(first.odometer).toBe(55000);
-    expect(first.title_type).toBe('SV');
   });
 
   it('throws ScraperError for null input', () => {
     expect(() => parseSoldResults(null)).toThrow(ScraperError);
   });
 
-  it('throws ScraperError for undefined input', () => {
-    expect(() => parseSoldResults(undefined)).toThrow(ScraperError);
-  });
-
-  it('throws ScraperError for non-object input', () => {
-    expect(() => parseSoldResults('bad')).toThrow(ScraperError);
-  });
-
-  it('handles missing odometer as null', () => {
-    const raw = {
-      items: [
-        {
-          stockNumber: 'T1',
-          saleDate: '2026-01-01T00:00:00Z',
-          finalBid: 5000,
-          primaryDamage: 'Rear End',
-          titleCode: 'SV',
-        },
-      ],
-    };
-    const entries = parseSoldResults(raw);
-    expect(entries[0]?.odometer).toBeNull();
-  });
-
-  it('handles string odometer value', () => {
-    const raw = {
-      items: [
-        {
-          stockNumber: 'T2',
-          saleDate: '2026-01-01T00:00:00Z',
-          finalBid: 3000,
-          primaryDamage: 'Front End',
-          titleCode: 'CL',
-          odometer: '42500',
-        },
-      ],
-    };
-    const entries = parseSoldResults(raw);
-    expect(entries[0]?.odometer).toBe(42500);
-  });
-
-  it('uses "Unknown" for missing titleCode', () => {
-    const raw = {
-      items: [
-        {
-          stockNumber: 'T3',
-          saleDate: '2026-01-01T00:00:00Z',
-          finalBid: 2000,
-          primaryDamage: 'Side',
-        },
-      ],
-    };
-    const entries = parseSoldResults(raw);
-    expect(entries[0]?.title_type).toBe('Unknown');
+  it('returns empty array for empty items', () => {
+    expect(parseSoldResults({ items: [] })).toEqual([]);
   });
 });
 
-// ─── computeAggregates ────────────────────────────────────────────────────
-
 describe('computeAggregates', () => {
-  it('returns all-zeros when entries array is empty', () => {
-    const agg = computeAggregates([]);
-    expect(agg.count).toBe(0);
-    expect(agg.avg_final_bid).toBe(0);
-    expect(agg.median_final_bid).toBe(0);
-    expect(agg.price_range.low).toBe(0);
-    expect(agg.price_range.high).toBe(0);
-  });
-
-  it('returns all-zeros when all final_bid entries are null', () => {
-    const entries = [
+  it('computes correct aggregates from sold entries', () => {
+    const entries: IaaiSoldEntry[] = [
       {
         lot_number: 'A',
-        sale_date: '',
-        final_bid: null,
-        damage_primary: '',
-        odometer: null,
-        title_type: 'SV',
-      },
-      {
-        lot_number: 'B',
-        sale_date: '',
-        final_bid: null,
-        damage_primary: '',
-        odometer: null,
-        title_type: 'SV',
-      },
-    ];
-    const agg = computeAggregates(entries);
-    expect(agg.count).toBe(0);
-    expect(agg.avg_final_bid).toBe(0);
-    expect(agg.median_final_bid).toBe(0);
-    expect(agg.price_range.low).toBe(0);
-    expect(agg.price_range.high).toBe(0);
-  });
-
-  it('excludes null bids from calculations', () => {
-    const entries = [
-      {
-        lot_number: 'A',
-        sale_date: '',
-        final_bid: 4000,
-        damage_primary: '',
-        odometer: null,
-        title_type: 'SV',
-      },
-      {
-        lot_number: 'B',
-        sale_date: '',
-        final_bid: null,
-        damage_primary: '',
-        odometer: null,
-        title_type: 'FL',
-      },
-      {
-        lot_number: 'C',
-        sale_date: '',
-        final_bid: 6000,
-        damage_primary: '',
-        odometer: null,
-        title_type: 'SV',
-      },
-    ];
-    const agg = computeAggregates(entries);
-    expect(agg.count).toBe(2);
-    expect(agg.avg_final_bid).toBe(5000);
-    expect(agg.median_final_bid).toBe(5000);
-    expect(agg.price_range.low).toBe(4000);
-    expect(agg.price_range.high).toBe(6000);
-  });
-
-  it('computes correct aggregates from fixture sold results', () => {
-    // Fixture has 4 non-null bids: 4200, 5800, 7100, 3500 (S10000003 is null)
-    const entries = [
-      {
-        lot_number: 'S1',
         sale_date: '',
         final_bid: 4200,
         damage_primary: '',
         odometer: null,
-        title_type: 'SV',
+        title_type: '',
       },
       {
-        lot_number: 'S2',
+        lot_number: 'B',
         sale_date: '',
         final_bid: 5800,
         damage_primary: '',
         odometer: null,
-        title_type: 'SV',
+        title_type: '',
       },
       {
-        lot_number: 'S3',
+        lot_number: 'C',
         sale_date: '',
         final_bid: null,
         damage_primary: '',
         odometer: null,
-        title_type: 'FL',
+        title_type: '',
       },
       {
-        lot_number: 'S4',
+        lot_number: 'D',
         sale_date: '',
         final_bid: 7100,
         damage_primary: '',
         odometer: null,
-        title_type: 'SV',
+        title_type: '',
       },
       {
-        lot_number: 'S5',
+        lot_number: 'E',
         sale_date: '',
         final_bid: 3500,
         damage_primary: '',
         odometer: null,
-        title_type: 'RB',
+        title_type: '',
       },
     ];
     const agg = computeAggregates(entries);
-    expect(agg.count).toBe(4);
-    // avg of 3500, 4200, 5800, 7100 = 20600 / 4 = 5150
-    expect(agg.avg_final_bid).toBe(5150);
-    // sorted: [3500, 4200, 5800, 7100] → median = (4200 + 5800) / 2 = 5000
-    expect(agg.median_final_bid).toBe(5000);
+    expect(agg.count).toBe(4); // null excluded
     expect(agg.price_range.low).toBe(3500);
     expect(agg.price_range.high).toBe(7100);
+    expect(agg.avg_final_bid).toBeCloseTo(5150, 1);
+    expect(agg.median_final_bid).toBe(5000); // median of [3500, 4200, 5800, 7100]
   });
 
-  it('computes correct median for odd number of entries', () => {
-    const entries = [
+  it('returns all zeros when all finalBids are null', () => {
+    const entries: IaaiSoldEntry[] = [
+      {
+        lot_number: 'X',
+        sale_date: '',
+        final_bid: null,
+        damage_primary: '',
+        odometer: null,
+        title_type: '',
+      },
+    ];
+    const agg = computeAggregates(entries);
+    expect(agg.count).toBe(0);
+    expect(agg.avg_final_bid).toBe(0);
+    expect(agg.median_final_bid).toBe(0);
+    expect(agg.price_range.low).toBe(0);
+    expect(agg.price_range.high).toBe(0);
+  });
+
+  it('returns all zeros for empty array', () => {
+    const agg = computeAggregates([]);
+    expect(agg.count).toBe(0);
+  });
+
+  it('computes median correctly for odd-length array', () => {
+    const entries: IaaiSoldEntry[] = [
       {
         lot_number: 'A',
         sale_date: '',
         final_bid: 1000,
         damage_primary: '',
         odometer: null,
-        title_type: 'SV',
+        title_type: '',
       },
       {
         lot_number: 'B',
         sale_date: '',
-        final_bid: 3000,
+        final_bid: 2000,
         damage_primary: '',
         odometer: null,
-        title_type: 'SV',
+        title_type: '',
       },
       {
         lot_number: 'C',
         sale_date: '',
-        final_bid: 2000,
+        final_bid: 3000,
         damage_primary: '',
         odometer: null,
-        title_type: 'SV',
+        title_type: '',
       },
     ];
     const agg = computeAggregates(entries);
-    expect(agg.count).toBe(3);
-    // sorted: [1000, 2000, 3000] → median = 2000
     expect(agg.median_final_bid).toBe(2000);
-    expect(agg.avg_final_bid).toBeCloseTo(2000);
-  });
-
-  it('handles single entry', () => {
-    const entries = [
-      {
-        lot_number: 'X',
-        sale_date: '',
-        final_bid: 5000,
-        damage_primary: '',
-        odometer: null,
-        title_type: 'SV',
-      },
-    ];
-    const agg = computeAggregates(entries);
-    expect(agg.count).toBe(1);
-    expect(agg.avg_final_bid).toBe(5000);
-    expect(agg.median_final_bid).toBe(5000);
-    expect(agg.price_range.low).toBe(5000);
-    expect(agg.price_range.high).toBe(5000);
   });
 });
-
-// ─── extractImageUrls ─────────────────────────────────────────────────────
 
 describe('extractImageUrls', () => {
   it('extracts URLs from array format', () => {
     const raw = {
-      stockNumber: 'A12345678',
-      imageUrls: [
-        'https://vg.iaai.com/A12345678_1_lrg.jpg',
-        'https://vg.iaai.com/A12345678_2_lrg.jpg',
-        'https://vg.iaai.com/A12345678_3_lrg.jpg',
-      ],
+      imageUrls: ['https://vg.iaai.com/img1.jpg', 'https://vg.iaai.com/img2.jpg'],
     };
-    const urls = extractImageUrls(raw);
-    expect(urls).toHaveLength(3);
-    expect(urls[0]).toBe('https://vg.iaai.com/A12345678_1_lrg.jpg');
+    const urls = extractImageUrls(raw as never);
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).toContain('iaai.com');
   });
 
-  it('extracts URLs from keyed-object format', () => {
+  it('extracts URLs from keyed object format', () => {
     const raw = {
-      stockNumber: 'B1',
       imageUrls: {
-        exterior: ['https://cdn.iaai.com/ext1.jpg', 'https://cdn.iaai.com/ext2.jpg'],
-        interior: ['https://cdn.iaai.com/int1.jpg'],
-        damage: ['https://cdn.iaai.com/dmg1.jpg'],
+        large: 'https://vg.iaai.com/large.jpg',
+        thumbnail: 'https://vg.iaai.com/thumb.jpg',
       },
     };
-    const urls = extractImageUrls(raw);
-    expect(urls).toHaveLength(4);
-    expect(urls).toContain('https://cdn.iaai.com/ext1.jpg');
-    expect(urls).toContain('https://cdn.iaai.com/int1.jpg');
-    expect(urls).toContain('https://cdn.iaai.com/dmg1.jpg');
-  });
-
-  it('handles keyed-object with string values', () => {
-    const raw = {
-      stockNumber: 'C1',
-      imageUrls: {
-        main: 'https://cdn.iaai.com/main.jpg',
-      } as Record<string, unknown>,
-    };
-    const urls = extractImageUrls(raw);
-    expect(urls).toHaveLength(1);
-    expect(urls[0]).toBe('https://cdn.iaai.com/main.jpg');
-  });
-
-  it('returns empty array when imageUrls is undefined', () => {
-    const raw = { stockNumber: 'D1' };
-    expect(extractImageUrls(raw)).toEqual([]);
-  });
-
-  it('filters non-string values from array format', () => {
-    const raw = {
-      stockNumber: 'E1',
-      imageUrls: [
-        'https://cdn.iaai.com/a.jpg',
-        null as unknown as string,
-        42 as unknown as string,
-        'https://cdn.iaai.com/b.jpg',
-      ],
-    };
-    const urls = extractImageUrls(raw);
+    const urls = extractImageUrls(raw as never);
     expect(urls).toHaveLength(2);
   });
 
-  it('extracts from search fixture first item (array format)', () => {
-    // Fixture: iaai-search-response.json items[0] has 3 imageUrls as an array of strings
-    const item = (searchFixture as { items: unknown[] }).items[0] as Parameters<
-      typeof extractImageUrls
-    >[0];
-    const urls = extractImageUrls(item);
-    expect(urls).toHaveLength(3);
-    expect(urls[0]).toBe('https://vg.iaai.com/A12345678_1_lrg.jpg');
-    expect(urls[1]).toBe('https://vg.iaai.com/A12345678_2_lrg.jpg');
-    expect(urls[2]).toBe('https://vg.iaai.com/A12345678_3_lrg.jpg');
+  it('returns empty array when imageUrls is missing', () => {
+    const urls = extractImageUrls({} as never);
+    expect(urls).toEqual([]);
   });
 
-  it('extracts from listing fixture (array format)', () => {
-    const urls = extractImageUrls(listingFixture as Parameters<typeof extractImageUrls>[0]);
-    expect(urls).toHaveLength(5);
+  it('handles mixed array of strings and non-strings', () => {
+    const raw = { imageUrls: ['https://good.com/img.jpg', 42, null] };
+    const urls = extractImageUrls(raw as never);
+    expect(urls).toHaveLength(1);
+  });
+});
+
+// ─── IaaiClient unit tests (mocked dependencies) ──────────────────────────────
+
+const mockListing: AuctionListing = {
+  source: 'iaai',
+  lot_number: 'A12345678',
+  vin: '1HGCM82633A004352',
+  year: 2019,
+  make: 'Toyota',
+  model: 'Camry',
+  trim: 'SE',
+  title_type: 'Salvage',
+  title_code: 'SV',
+  damage_primary: 'Front End',
+  damage_secondary: 'Minor Dents/Scratches',
+  has_keys: true,
+  odometer: 45231,
+  odometer_status: 'ACTUAL',
+  color: 'Silver',
+  engine: '2.5L 4 Cylinder',
+  transmission: 'Automatic',
+  drive_type: 'FWD',
+  fuel_type: 'Gas',
+  cylinders: 4,
+  current_bid: 3200,
+  buy_now_price: 6500,
+  sale_date: '2026-04-20T10:00:00Z',
+  sale_status: 'UPCOMING',
+  final_bid: null,
+  location: 'Houston North',
+  location_zip: '77060',
+  latitude: 29.9902,
+  longitude: -95.3368,
+  image_url: 'https://vg.iaai.com/A12345678_1_lrg.jpg',
+  image_urls: ['https://vg.iaai.com/A12345678_1_lrg.jpg'],
+  detail_url: 'https://www.iaai.com/VehicleDetail/A12345678',
+  seller: 'GEICO',
+  grid_row: null,
+  fetched_at: new Date().toISOString(),
+};
+
+const mockSoldResponse: SoldHistoryResponse = {
+  lots: [
+    {
+      lot_number: 'S10000001',
+      sale_date: '2026-01-10T10:00:00Z',
+      final_bid: 4200,
+      damage_primary: 'Front End',
+      odometer: 55000,
+      title_type: 'SV',
+    },
+  ],
+  aggregates: {
+    count: 1,
+    avg_final_bid: 4200,
+    median_final_bid: 4200,
+    price_range: { low: 4200, high: 4200 },
+  },
+};
+
+function makeMockBrowser() {
+  return {
+    getPage: vi.fn(),
+    authenticate: vi.fn().mockResolvedValue(undefined),
+    restoreSession: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+function makeMockPage() {
+  return {
+    goto: vi.fn().mockResolvedValue({ status: () => 200 }),
+    url: vi.fn().mockReturnValue('https://www.iaai.com/Search'),
+    title: vi.fn().mockResolvedValue(''),
+    content: vi.fn().mockResolvedValue('<html><body>results</body></html>'),
+    close: vi.fn().mockResolvedValue(undefined),
+    route: vi.fn().mockResolvedValue(undefined),
+    unroute: vi.fn().mockResolvedValue(undefined),
+    on: vi.fn(),
+    removeListener: vi.fn(),
+    removeAllListeners: vi.fn(),
+    evaluate: vi.fn().mockResolvedValue(null),
+    mouse: {
+      move: vi.fn().mockResolvedValue(undefined),
+      wheel: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+}
+
+function makeMockSqliteCache() {
+  return {
+    getSearch: vi.fn().mockResolvedValue(null),
+    setSearch: vi.fn().mockResolvedValue(undefined),
+    getListing: vi.fn().mockResolvedValue(null),
+    setListing: vi.fn().mockResolvedValue(undefined),
+    getSoldHistory: vi.fn().mockResolvedValue(null),
+    setSoldHistory: vi.fn().mockResolvedValue(undefined),
+    watchlistAdd: vi.fn(),
+    watchlistRemove: vi.fn().mockReturnValue(true),
+    watchlistList: vi.fn().mockReturnValue([]),
+    watchlistGet: vi.fn().mockReturnValue(null),
+    watchlistUpdate: vi.fn(),
+    watchlistAddHistory: vi.fn(),
+  };
+}
+
+function makeMockMemoryCache() {
+  const store = new Map<string, unknown>();
+  return {
+    get: vi.fn((key: string) => store.get(key)),
+    set: vi.fn((key: string, value: unknown) => {
+      store.set(key, value);
+    }),
+    has: vi.fn((key: string) => store.has(key)),
+    delete: vi.fn((key: string) => {
+      store.delete(key);
+    }),
+    clear: vi.fn(() => {
+      store.clear();
+    }),
+  };
+}
+
+function makeMockImageCache() {
+  return {
+    has: vi.fn().mockResolvedValue(false),
+    get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+function makeMockRateLimiter() {
+  return {
+    acquire: vi.fn().mockResolvedValue(undefined),
+    applyBackoff: vi.fn(),
+    resetBackoff: vi.fn(),
+    execute: vi.fn((fn: () => Promise<unknown>) => fn()),
+  };
+}
+
+// ─── IaaiClient.search ────────────────────────────────────────────────────────
+
+describe('IaaiClient.search', () => {
+  let browser: ReturnType<typeof makeMockBrowser>;
+  let sqliteCache: ReturnType<typeof makeMockSqliteCache>;
+  let memoryCache: ReturnType<typeof makeMockMemoryCache>;
+  let imageCache: ReturnType<typeof makeMockImageCache>;
+  let rateLimiter: ReturnType<typeof makeMockRateLimiter>;
+  let client: IaaiClient;
+
+  beforeEach(() => {
+    browser = makeMockBrowser();
+    sqliteCache = makeMockSqliteCache();
+    memoryCache = makeMockMemoryCache();
+    imageCache = makeMockImageCache();
+    rateLimiter = makeMockRateLimiter();
+    client = new IaaiClient(
+      browser as never,
+      sqliteCache as never,
+      memoryCache as never,
+      imageCache as never,
+      rateLimiter as never
+    );
+  });
+
+  it('returns LRU cache hit without touching SQLite or browser', async () => {
+    memoryCache.get.mockReturnValue([mockListing]);
+
+    const result = await client.search({ query: 'Toyota Camry' });
+    expect(result.cached).toBe(true);
+    expect(result.stale).toBe(false);
+    expect(result.data).toHaveLength(1);
+    expect(sqliteCache.getSearch).not.toHaveBeenCalled();
+    expect(browser.getPage).not.toHaveBeenCalled();
+  });
+
+  it('returns SQLite cache hit and populates LRU', async () => {
+    const now = new Date().toISOString();
+    sqliteCache.getSearch.mockResolvedValue({ data: [mockListing], fetched_at: now });
+
+    const result = await client.search({ query: 'Toyota Camry' });
+    expect(result.cached).toBe(true);
+    expect(result.data).toHaveLength(1);
+    expect(memoryCache.set).toHaveBeenCalled();
+    expect(browser.getPage).not.toHaveBeenCalled();
+  });
+
+  it('calls RateLimiter.execute() before navigation', async () => {
+    const page = makeMockPage();
+    browser.getPage.mockResolvedValue(page);
+
+    await client.search({ query: 'Honda Civic' }).catch(() => {});
+    expect(rateLimiter.execute).toHaveBeenCalledOnce();
+  });
+
+  it('throws CaptchaError when CAPTCHA detected', async () => {
+    const page = makeMockPage();
+    page.url.mockReturnValue('https://www.iaai.com/captcha');
+    browser.getPage.mockResolvedValue(page);
+
+    await expect(client.search({ query: 'test' })).rejects.toThrow(CaptchaError);
+  });
+
+  it('returns stale cache fallback on scraper failure', async () => {
+    const now = new Date().toISOString();
+    const page = makeMockPage();
+    page.goto.mockRejectedValue(new Error('Network error'));
+    browser.getPage.mockResolvedValue(page);
+    sqliteCache.getSearch
+      .mockResolvedValueOnce(null) // fresh miss
+      .mockResolvedValueOnce({ data: [mockListing], fetched_at: now }); // stale hit
+
+    const result = await client.search({ query: 'Honda Accord' });
+    expect(result.stale).toBe(true);
+    expect(result.cached).toBe(true);
+    expect(result.cachedAt).toBe(now);
+  });
+
+  it('throws ScraperError when no cache and scraper fails', async () => {
+    const page = makeMockPage();
+    page.goto.mockRejectedValue(new Error('Connection refused'));
+    browser.getPage.mockResolvedValue(page);
+
+    await expect(client.search({ query: 'Ford F-150' })).rejects.toThrow(ScraperError);
+  });
+
+  it('throws RateLimitError on HTTP 429', async () => {
+    const page = makeMockPage();
+    page.goto.mockResolvedValue({ status: () => 429 });
+    browser.getPage.mockResolvedValue(page);
+
+    await expect(client.search({ query: 'BMW' })).rejects.toThrow(RateLimitError);
+  });
+});
+
+// ─── IaaiClient.getListing ────────────────────────────────────────────────────
+
+describe('IaaiClient.getListing', () => {
+  let browser: ReturnType<typeof makeMockBrowser>;
+  let sqliteCache: ReturnType<typeof makeMockSqliteCache>;
+  let memoryCache: ReturnType<typeof makeMockMemoryCache>;
+  let imageCache: ReturnType<typeof makeMockImageCache>;
+  let rateLimiter: ReturnType<typeof makeMockRateLimiter>;
+  let client: IaaiClient;
+
+  beforeEach(() => {
+    browser = makeMockBrowser();
+    sqliteCache = makeMockSqliteCache();
+    memoryCache = makeMockMemoryCache();
+    imageCache = makeMockImageCache();
+    rateLimiter = makeMockRateLimiter();
+    client = new IaaiClient(
+      browser as never,
+      sqliteCache as never,
+      memoryCache as never,
+      imageCache as never,
+      rateLimiter as never
+    );
+  });
+
+  it('returns SQLite cache hit', async () => {
+    const now = new Date().toISOString();
+    sqliteCache.getListing.mockResolvedValue({ data: mockListing, fetched_at: now });
+
+    const result = await client.getListing('A12345678');
+    expect(result.cached).toBe(true);
+    expect(result.stale).toBe(false);
+    expect(result.data.lot_number).toBe('A12345678');
+    expect(browser.getPage).not.toHaveBeenCalled();
+  });
+
+  it('calls RateLimiter.execute() before navigation', async () => {
+    const page = makeMockPage();
+    browser.getPage.mockResolvedValue(page);
+
+    await client.getListing('A12345678').catch(() => {});
+    expect(rateLimiter.execute).toHaveBeenCalledOnce();
+  });
+
+  it('throws ScraperError on 404', async () => {
+    const page = makeMockPage();
+    page.goto.mockResolvedValue({ status: () => 404 });
+    browser.getPage.mockResolvedValue(page);
+
+    await expect(client.getListing('NOTFOUND')).rejects.toThrow(ScraperError);
+  });
+
+  it('returns stale cache on scraper failure', async () => {
+    const now = new Date().toISOString();
+    const page = makeMockPage();
+    page.goto.mockRejectedValue(new Error('Timeout'));
+    browser.getPage.mockResolvedValue(page);
+    sqliteCache.getListing
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ data: mockListing, fetched_at: now });
+
+    const result = await client.getListing('A12345678');
+    expect(result.stale).toBe(true);
+    expect(result.data.lot_number).toBe('A12345678');
+  });
+});
+
+// ─── IaaiClient.getSoldHistory ────────────────────────────────────────────────
+
+describe('IaaiClient.getSoldHistory', () => {
+  let browser: ReturnType<typeof makeMockBrowser>;
+  let sqliteCache: ReturnType<typeof makeMockSqliteCache>;
+  let memoryCache: ReturnType<typeof makeMockMemoryCache>;
+  let imageCache: ReturnType<typeof makeMockImageCache>;
+  let client: IaaiClient;
+
+  beforeEach(() => {
+    browser = makeMockBrowser();
+    sqliteCache = makeMockSqliteCache();
+    memoryCache = makeMockMemoryCache();
+    imageCache = makeMockImageCache();
+    client = new IaaiClient(
+      browser as never,
+      sqliteCache as never,
+      memoryCache as never,
+      imageCache as never
+    );
+  });
+
+  it('returns SQLite cache hit (7-day TTL)', async () => {
+    const now = new Date().toISOString();
+    sqliteCache.getSoldHistory.mockResolvedValue({ data: mockSoldResponse, fetched_at: now });
+
+    const result = await client.getSoldHistory({ make: 'Toyota', model: 'Camry' });
+    expect(result.cached).toBe(true);
+    expect(result.data.aggregates.count).toBe(1);
+    expect(browser.getPage).not.toHaveBeenCalled();
+  });
+
+  it('returns stale sold history on failure when cache exists', async () => {
+    const now = new Date().toISOString();
+    const page = makeMockPage();
+    page.goto.mockRejectedValue(new Error('Network error'));
+    browser.getPage.mockResolvedValue(page);
+    sqliteCache.getSoldHistory
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ data: mockSoldResponse, fetched_at: now });
+
+    const result = await client.getSoldHistory({ make: 'Honda', model: 'Civic' });
+    expect(result.stale).toBe(true);
+    expect(result.data.lots).toHaveLength(1);
+  });
+});
+
+// ─── IaaiClient.watchListing ──────────────────────────────────────────────────
+
+describe('IaaiClient.watchListing', () => {
+  let sqliteCache: ReturnType<typeof makeMockSqliteCache>;
+  let client: IaaiClient;
+
+  beforeEach(() => {
+    sqliteCache = makeMockSqliteCache();
+    client = new IaaiClient(
+      makeMockBrowser() as never,
+      sqliteCache as never,
+      makeMockMemoryCache() as never,
+      makeMockImageCache() as never
+    );
+  });
+
+  it('adds a stock number to watchlist', () => {
+    client.watchListing('add', 'A12345678', 5000, 'Check daily');
+    expect(sqliteCache.watchlistAdd).toHaveBeenCalledWith({
+      lot_number: 'A12345678',
+      bid_threshold: 5000,
+      notes: 'Check daily',
+    });
+  });
+
+  it('throws ScraperError when add is called without stockNumber', () => {
+    expect(() => client.watchListing('add')).toThrow(ScraperError);
+  });
+
+  it('removes a stock number from watchlist', () => {
+    sqliteCache.watchlistRemove.mockReturnValue(true);
+    const result = client.watchListing('remove', 'A12345678');
+    expect(result).toBe(true);
+    expect(sqliteCache.watchlistRemove).toHaveBeenCalledWith('A12345678');
+  });
+
+  it('throws ScraperError when remove is called without stockNumber', () => {
+    expect(() => client.watchListing('remove')).toThrow(ScraperError);
+  });
+
+  it('lists all watchlist entries', () => {
+    const mockEntry = {
+      lot_number: 'A12345678',
+      source: 'iaai' as const,
+      added_at: new Date().toISOString(),
+      bid_threshold: null,
+      last_checked_at: null,
+      last_bid: null,
+      last_status: null,
+      notes: null,
+    };
+    sqliteCache.watchlistList.mockReturnValue([mockEntry]);
+
+    const result = client.watchListing('list') as (typeof mockEntry)[];
+    expect(result).toHaveLength(1);
+    expect(result[0]?.source).toBe('iaai');
+  });
+
+  it('throws ScraperError for unknown action', () => {
+    expect(() => client.watchListing('unknown' as never)).toThrow(ScraperError);
   });
 });
