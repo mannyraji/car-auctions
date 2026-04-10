@@ -2,6 +2,7 @@
  * IAAI Scraper MCP — entry point
  */
 import { initTracing } from '@car-auctions/shared';
+import type { McpServerOptions } from '@car-auctions/shared';
 import { IaaiBrowser } from './scraper/browser.js';
 import { IaaiClient } from './scraper/iaai-client.js';
 import { IaaiSqliteCache } from './cache/sqlite.js';
@@ -10,64 +11,70 @@ import { ImageCache } from './cache/image-cache.js';
 import { RateLimiter } from './utils/rate-limiter.js';
 import { config } from './utils/config.js';
 import { createServer } from './server.js';
-import type { McpServerOptions } from '@car-auctions/shared';
+
+// ─── Transport resolution ─────────────────────────────────────────────────────
 
 const TRANSPORT_ALIASES: Record<string, McpServerOptions['transport']> = {
-  sse: 'sse',
   stdio: 'stdio',
-  websocket: 'websocket',
+  sse: 'sse',
   ws: 'websocket',
+  websocket: 'websocket',
 };
 
-function assertRequiredCredentials(): void {
-  const email = process.env['IAAI_EMAIL'];
-  const password = process.env['IAAI_PASSWORD'];
+function resolveTransport(): McpServerOptions['transport'] {
+  const raw = (process.env['TRANSPORT'] ?? 'stdio').trim().toLowerCase();
+  const resolved = TRANSPORT_ALIASES[raw];
+  if (!resolved) {
+    throw new Error(
+      `Config error: invalid TRANSPORT "${raw}". Must be one of: stdio, sse, ws, websocket`
+    );
+  }
+  return resolved;
+}
 
-  if (!email || !password) {
-    const missing: string[] = [];
-    if (!email) missing.push('IAAI_EMAIL');
-    if (!password) missing.push('IAAI_PASSWORD');
+// ─── Credential validation ────────────────────────────────────────────────────
+
+function assertRequiredCredentials(): void {
+  const missing: string[] = [];
+  if (!process.env['IAAI_EMAIL']) missing.push('IAAI_EMAIL');
+  if (!process.env['IAAI_PASSWORD']) missing.push('IAAI_PASSWORD');
+  if (missing.length > 0) {
     throw new Error(
       `Config error: missing required environment variable(s): ${missing.join(', ')}`
     );
   }
 }
 
-function resolveTransport(): McpServerOptions['transport'] {
-  const rawTransport = (process.env['TRANSPORT'] ?? 'stdio').trim().toLowerCase();
-  const transport = TRANSPORT_ALIASES[rawTransport];
+// ─── Resource cleanup helper ──────────────────────────────────────────────────
 
-  if (!transport) {
-    throw new Error(
-      `Config error: invalid TRANSPORT "${rawTransport}". Must be one of: stdio, sse, ws, websocket`
-    );
-  }
-
-  return transport;
-}
-
-async function cleanupResources(browser: IaaiBrowser, cache: IaaiSqliteCache): Promise<void> {
-  const cleanupErrors: unknown[] = [];
+async function closeResources(browser: IaaiBrowser, cache: IaaiSqliteCache): Promise<void> {
+  let firstError: unknown;
 
   try {
     await browser.close();
   } catch (err) {
-    cleanupErrors.push(err);
+    firstError = err;
   }
 
   try {
     cache.close();
   } catch (err) {
-    cleanupErrors.push(err);
+    if (firstError === undefined) {
+      firstError = err;
+    } else {
+      console.error('Error closing cache during shutdown:', err);
+    }
   }
 
-  if (cleanupErrors.length > 0) {
-    throw cleanupErrors[0];
+  if (firstError !== undefined) {
+    throw firstError;
   }
 }
 
-// 2. Initialize tracing (no-op when OTEL_EXPORTER_OTLP_ENDPOINT is unset)
+// ─── Tracing (no-op when OTEL_EXPORTER_OTLP_ENDPOINT is unset) ───────────────
 initTracing({ serviceName: 'iaai-scraper-mcp' });
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   // 1. Fail-fast env validation
@@ -75,99 +82,58 @@ async function main(): Promise<void> {
 
   // 3. Instantiate all dependencies
   const browser = new IaaiBrowser();
-  let shuttingDown = false;
+  const cache = new IaaiSqliteCache();
+  const memoryCache = new MemoryCache();
+  const imageCache = new ImageCache();
+  const rateLimiter = new RateLimiter(config.rateLimit);
+  const client = new IaaiClient(browser, cache, memoryCache, imageCache, rateLimiter, config);
+
+  // 5. Resolve transport before startup so failures surface early
+  const transport = resolveTransport();
+
   let startupComplete = false;
-
-  const closeResources = async (): Promise<void> => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-
-    let closeError: unknown;
-
-    try {
-      await browser.close();
-    } catch (err) {
-      closeError = err;
-    }
-
-    try {
-      cache.close();
-    } catch (err) {
-      if (closeError === undefined) {
-        closeError = err;
-      } else {
-        console.error('Error closing cache during shutdown:', err);
-      }
-    }
-
-    if (closeError !== undefined) {
-      throw closeError;
-    }
-  };
+  let shuttingDown = false;
 
   try {
-    // 5. Select transport from TRANSPORT env var ("ws" is normalized to "websocket")
-    const rawTransport = process.env['TRANSPORT'] ?? 'stdio';
-    const transport: McpServerOptions['transport'] =
-      rawTransport === 'ws' ? 'websocket' : (rawTransport as McpServerOptions['transport']);
-
     // 4 & 6. Build the MCP server and start listening on the selected transport
     await createServer({ client, cache, imageCache }, transport);
     startupComplete = true;
-
-    // Graceful shutdown — guard ensures cleanup runs at most once
-    const shutdown = async (): Promise<void> => {
-      try {
-        await closeResources();
-        process.exitCode = 0;
-      } catch (err) {
-        console.error('Error during shutdown:', err);
-        process.exitCode = 1;
-      }
-    };
-
-    process.on('SIGINT', () => {
-      shutdown()
-        .catch(console.error)
-        .finally(() => {
-          process.exit(process.exitCode ?? 0);
-        });
-    });
-    process.on('SIGTERM', () => {
-      shutdown()
-        .catch(console.error)
-        .finally(() => {
-          process.exit(process.exitCode ?? 0);
-        });
-    });
   } finally {
     if (!startupComplete) {
       try {
-        await closeResources();
-      } catch (err) {
-        console.error('Error during startup cleanup:', err);
+        await closeResources(browser, cache);
+      } catch (cleanupErr) {
+        console.error('Error during startup cleanup:', cleanupErr);
       }
     }
   }
 
-  try {
-    // 4 & 6. Build the MCP server and start listening on the selected transport
-    await createServer({ client, cache, imageCache }, transport);
-  } catch (err) {
+  // Graceful shutdown — guard ensures cleanup runs at most once
+  const shutdown = async (): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     try {
-      await cleanupResources(browser, cache);
-    } catch (cleanupErr) {
-      console.error('Error during startup cleanup:', cleanupErr);
+      await closeResources(browser, cache);
+      process.exitCode = 0;
+    } catch (err) {
+      console.error('Error during shutdown:', err);
+      process.exitCode = 1;
     }
-    throw err;
-  }
+  };
+
+  process.on('SIGINT', () => {
+    shutdown()
+      .catch(console.error)
+      .finally(() => process.exit(process.exitCode ?? 0));
+  });
+  process.on('SIGTERM', () => {
+    shutdown()
+      .catch(console.error)
+      .finally(() => process.exit(process.exitCode ?? 0));
+  });
 }
 
 main().catch((err: unknown) => {
-  if (err instanceof Error) {
-    console.error('Fatal error:', err.message);
-  } else {
-    console.error('Fatal error:', err);
-  }
+  console.error('Fatal error:', err instanceof Error ? err.message : err);
   process.exit(1);
 });
