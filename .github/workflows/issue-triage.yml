@@ -6,7 +6,7 @@ concurrency:
 
 on:
   issues:
-    types: [opened, reopened, edited, labeled]
+    types: [opened, reopened, edited]
 
 permissions:
   contents: read
@@ -25,12 +25,6 @@ jobs:
               return;
             }
 
-            const action = context.payload.action || "";
-            const eventLabelName = context.payload.label?.name || "";
-            if (action === "labeled" && eventLabelName !== "status:ready-for-triage") {
-              return;
-            }
-
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const issue_number = issue.number;
@@ -44,10 +38,6 @@ jobs:
             ));
 
             if (currentLabels.has("needs-info")) {
-              return;
-            }
-
-            if (!currentLabels.has("status:ready-for-triage")) {
               return;
             }
 
