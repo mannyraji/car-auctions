@@ -1,6 +1,6 @@
 /**
- * In-memory LRU cache for IAAI search results
- * Max 200 entries, configurable TTL (default 15 min)
+ * In-memory LRU cache for search results
+ * Max 200 entries, 15-minute TTL
  */
 
 interface CacheEntry<T> {
@@ -32,7 +32,7 @@ export class MemoryCache<T = unknown> {
 
   set(key: string, value: T): void {
     this.evictExpired();
-    if (this.store.size >= this.maxEntries) {
+    if (this.store.size >= this.maxEntries && !this.store.has(key)) {
       this.evictLru();
     }
     this.store.set(key, {
@@ -40,10 +40,6 @@ export class MemoryCache<T = unknown> {
       expiresAt: Date.now() + this.ttlMs,
       lastAccessed: Date.now(),
     });
-  }
-
-  has(key: string): boolean {
-    return this.get(key) !== undefined;
   }
 
   delete(key: string): void {

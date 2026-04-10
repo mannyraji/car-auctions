@@ -6,11 +6,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { AuctionListing } from '@car-auctions/shared';
 import type {
-  IaaiSoldEntry,
+  SoldHistoryResponse,
   WatchlistEntry,
   WatchlistHistoryEntry,
   WatchlistAddParams,
-  SoldHistoryResponse,
 } from '../types/index.js';
 
 const require = createRequire(import.meta.url);
@@ -24,6 +23,8 @@ function loadSqlite(): typeof import('better-sqlite3') {
 }
 
 function resolveDefaultPath(): string {
+  // Resolves to <package-root>/data/iaai.sqlite regardless of cwd.
+  // src/cache/sqlite.ts → ../../ = package root
   const here = fileURLToPath(import.meta.url);
   return path.resolve(path.dirname(here), '..', '..', 'data', 'iaai.sqlite');
 }
@@ -87,9 +88,11 @@ export class IaaiSqliteCache {
         old_value TEXT,
         new_value TEXT,
         detected_at TEXT NOT NULL,
-        FOREIGN KEY (lot_number) REFERENCES watchlist(lot_number)
+        FOREIGN KEY (lot_number) REFERENCES watchlist(lot_number) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_watchlist_history_lot ON watchlist_history(lot_number);
+      CREATE INDEX IF NOT EXISTS idx_listings_expires ON listings(expires_at);
+      CREATE INDEX IF NOT EXISTS idx_sold_expires ON sold_history(expires_at);
     `);
   }
 
@@ -226,8 +229,10 @@ export class IaaiSqliteCache {
   ]);
 
   watchlistUpdate(lotNumber: string, updates: Partial<WatchlistEntry>): void {
-    // WATCHLIST_COLUMNS allowlist ensures only valid column names can appear in
-    // the SET clause — no user-supplied strings are used to construct SQL.
+    // Safety: only entries whose key is in WATCHLIST_COLUMNS (a static allowlist) reach
+    // the SQL template. lot_number is explicitly excluded to prevent PK mutation.
+    // The column names never come from user input — they originate from the typed
+    // Partial<WatchlistEntry> keys, and the allowlist rejects anything unexpected.
     const safeEntries = Object.entries(updates).filter(
       ([k]) => k !== 'lot_number' && IaaiSqliteCache.WATCHLIST_COLUMNS.has(k)
     );

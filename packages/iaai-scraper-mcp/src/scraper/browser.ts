@@ -5,19 +5,21 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
-import { CaptchaError } from '@car-auctions/shared';
 import type { Page, BrowserContext } from 'playwright';
-import { isCaptchaPage, randomDelay } from '../utils/stealth.js';
+import { CaptchaError, ScraperError } from '@car-auctions/shared';
+import { isCaptchaPage } from '../utils/stealth.js';
 import type { IaaiSession } from '../types/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSION_PATH = path.resolve(__dirname, '..', '..', 'data', 'iaai-session.json');
 const IAAI_LOGIN_URL = 'https://www.iaai.com/Account/Login';
+const IAAI_ORIGIN = 'https://www.iaai.com';
 
 export class IaaiBrowser {
   private browser: import('playwright').Browser | null = null;
   private context: BrowserContext | null = null;
   private launchPromise: Promise<void> | null = null;
+  private _reauthing = false;
 
   async launch(): Promise<void> {
     if (this.browser) return;
@@ -31,6 +33,7 @@ export class IaaiBrowser {
   }
 
   private async _doLaunch(): Promise<void> {
+    // Use dynamic import so Vitest can mock these modules in tests
     const playwrightExtra = (await import('playwright-extra')) as {
       chromium: import('playwright').BrowserType & { use: (plugin: unknown) => void };
     };
@@ -60,68 +63,112 @@ export class IaaiBrowser {
     await this.restoreSession();
   }
 
+  /**
+   * Authenticate with IAAI using email/password credentials.
+   * Fills the login form, submits, checks for CAPTCHA, and persists the session.
+   * Throws CaptchaError if a CAPTCHA challenge is detected.
+   */
   async authenticate(email: string, password: string): Promise<void> {
-    if (!this.context) await this.launch();
-    const page = await this.context!.newPage();
-    try {
-      await page.goto(IAAI_LOGIN_URL, { waitUntil: 'networkidle', timeout: 30000 });
+    if (!this.context) throw new ScraperError('Browser not launched — call launch() first');
 
-      const pageUrl = page.url();
-      const content = await page.content();
-      if (isCaptchaPage(pageUrl, content)) {
-        throw new CaptchaError('IAAI CAPTCHA detected on login page');
+    const page = await this.context.newPage();
+    try {
+      await page.goto(IAAI_LOGIN_URL, { waitUntil: 'networkidle' });
+
+      if (await isCaptchaPage(page)) {
+        throw new CaptchaError('CAPTCHA detected on IAAI login page');
       }
 
       await page.fill('#Email', email);
-      await randomDelay(500, 1000);
       await page.fill('#Password', password);
-      await randomDelay(300, 700);
-      await Promise.all([page.waitForNavigation({ timeout: 30000 }), page.click('[type="submit"]')]);
+      await page.click('[type="submit"]');
 
-      const afterUrl = page.url();
-      const afterContent = await page.content();
-      if (isCaptchaPage(afterUrl, afterContent)) {
-        throw new CaptchaError('IAAI CAPTCHA detected after login attempt');
+      await page.waitForLoadState('networkidle');
+
+      if (await isCaptchaPage(page)) {
+        throw new CaptchaError('CAPTCHA detected after IAAI login submission');
       }
 
       await this.saveSession(page);
     } finally {
-      await page.close().catch(() => {});
+      await page.close();
     }
   }
 
+  /**
+   * Load saved session from disk and hydrate the browser context.
+   * Silently succeeds if no session file exists yet.
+   */
   async restoreSession(): Promise<void> {
     if (!this.context) return;
+
+    let session: IaaiSession;
     try {
       const raw = await fs.readFile(SESSION_PATH, 'utf-8');
-      const session = JSON.parse(raw) as IaaiSession;
-      await this.context.addCookies(
-        session.cookies as Parameters<typeof this.context.addCookies>[0]
-      );
+      session = JSON.parse(raw) as IaaiSession;
     } catch {
-      // No saved session — will authenticate on first navigation
+      // No session yet — that's fine
+      return;
+    }
+
+    try {
+      if (session.cookies?.length) {
+        await this.context.addCookies(
+          session.cookies as Parameters<typeof this.context.addCookies>[0]
+        );
+      }
+
+      if (session.localStorage) {
+        for (const [origin, store] of Object.entries(session.localStorage)) {
+          const page = await this.context.newPage();
+          try {
+            await page.goto(origin, { waitUntil: 'commit' });
+            await page.evaluate((kvMap: Record<string, string>) => {
+              for (const [key, value] of Object.entries(kvMap)) {
+                localStorage.setItem(key, value);
+              }
+            }, store);
+          } finally {
+            await page.close();
+          }
+        }
+      }
+    } catch {
+      // Best-effort session restoration
     }
   }
 
-  private async saveSession(page: Page): Promise<void> {
+  /**
+   * Persist current cookies and localStorage to data/iaai-session.json.
+   */
+  async saveSession(page?: Page): Promise<void> {
     if (!this.context) return;
     try {
       const cookies = await this.context.cookies();
-      const localStorage = await page.evaluate<Record<string, Record<string, string>>>(() => {
-        const result: Record<string, Record<string, string>> = {};
-        const origin = window.location.origin;
-        result[origin] = {};
-        for (let i = 0; i < window.localStorage.length; i++) {
-          const key = window.localStorage.key(i);
-          if (key) result[origin][key] = window.localStorage.getItem(key) ?? '';
-        }
-        return result;
-      });
+
+      let localStorageData: Record<string, string> = {};
+      if (page && !page.isClosed()) {
+        localStorageData = await page
+          .evaluate(() => {
+            const result: Record<string, string> = {};
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key !== null) {
+                const value = localStorage.getItem(key);
+                if (value !== null) result[key] = value;
+              }
+            }
+            return result;
+          })
+          .catch(() => ({}));
+      }
+
       const session: IaaiSession = {
         cookies: cookies as unknown as IaaiSession['cookies'],
-        localStorage,
+        localStorage: { [IAAI_ORIGIN]: localStorageData },
         savedAt: new Date().toISOString(),
       };
+
       await fs.mkdir(path.dirname(SESSION_PATH), { recursive: true });
       await fs.writeFile(SESSION_PATH, JSON.stringify(session, null, 2));
     } catch {
@@ -129,24 +176,69 @@ export class IaaiBrowser {
     }
   }
 
+  /**
+   * Get a new page from the browser context.
+   * If the page is redirected to the login page, re-authenticates once.
+   */
   async getPage(): Promise<Page> {
     await this.launch();
-    if (!this.context) throw new Error('Browser context not initialized');
-    return this.context.newPage();
+    if (!this.context) throw new ScraperError('Browser context not initialized');
+
+    const page = await this.context.newPage();
+
+    // Detect redirect to login and re-authenticate once (guarded against concurrent attempts)
+    page.on('response', (response) => {
+      try {
+        const parsed = new URL(response.url());
+        const isLoginRedirect =
+          parsed.hostname === 'www.iaai.com' && parsed.pathname === '/Account/Login';
+        if (!isLoginRedirect || this._reauthing) return;
+
+        const email = process.env['IAAI_EMAIL'];
+        const password = process.env['IAAI_PASSWORD'];
+        if (email && password) {
+          this._reauthing = true;
+          this.authenticate(email, password)
+            .catch(() => {})
+            .finally(() => {
+              this._reauthing = false;
+            });
+        }
+      } catch {
+        // Ignore malformed URLs
+      }
+    });
+
+    return page;
   }
 
+  /**
+   * Close the browser, saving the session first.
+   */
   async close(): Promise<void> {
+    if (this.context) {
+      // Save session using a temporary page if needed
+      const pages = this.context.pages();
+      const activePage = pages.find((p) => !p.isClosed() && p.url().startsWith(IAAI_ORIGIN));
+      await this.saveSession(activePage);
+    }
+
     await this.context?.close().catch(() => {});
     await this.browser?.close().catch(() => {});
     this.context = null;
     this.browser = null;
+    this.launchPromise = null;
   }
 }
 
+// ─── Singleton ────────────────────────────────────────────────────────────────
+
 let _instance: IaaiBrowser | null = null;
 
-/** Singleton accessor for the shared IaaiBrowser instance. */
+/** Returns the shared IaaiBrowser singleton, creating it on first call. */
 export function getBrowserInstance(): IaaiBrowser {
-  if (!_instance) _instance = new IaaiBrowser();
+  if (!_instance) {
+    _instance = new IaaiBrowser();
+  }
   return _instance;
 }

@@ -1,6 +1,6 @@
 /**
- * Disk-based image cache for IAAI vehicle images
- * Stores compressed WebP files named by SHA-256 hash of source URL
+ * Disk-based image cache for IAAI lot images
+ * Stores compressed WebP files named by URL hash
  */
 import path from 'path';
 import fs from 'fs/promises';

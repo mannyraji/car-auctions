@@ -3,6 +3,7 @@
  * Enforces 1 req/3s, exponential backoff on 403/429, daily cap 500
  */
 import { RateLimitError } from '@car-auctions/shared';
+import { config } from './config.js';
 
 interface RateLimiterConfig {
   requestsPerSecond?: number;
@@ -21,16 +22,16 @@ export class RateLimiter {
   private readonly maxBackoffMs: number;
   private currentBackoffMs = 0;
 
-  constructor(config: RateLimiterConfig = {}) {
-    const rps = config.requestsPerSecond ?? 0.33;
+  constructor(cfg: RateLimiterConfig = {}) {
+    const rps = cfg.requestsPerSecond ?? config.rateLimit.requestsPerSecond;
     this.minIntervalMs = Math.ceil(1000 / rps);
-    this.dailyCap = config.dailyCap ?? 500;
-    this.backoffMultiplier = config.backoffMultiplier ?? 2;
-    this.maxBackoffMs = config.maxBackoffMs ?? 60000;
+    this.dailyCap = cfg.dailyCap ?? config.rateLimit.dailyCap;
+    this.backoffMultiplier = cfg.backoffMultiplier ?? config.rateLimit.backoffMultiplier;
+    this.maxBackoffMs = cfg.maxBackoffMs ?? config.rateLimit.maxBackoffMs;
     this.dailyResetAt = this.nextMidnight();
   }
 
-  async acquire(): Promise<void> {
+  async execute<T>(fn: () => Promise<T>): Promise<T> {
     if (Date.now() >= this.dailyResetAt) {
       this.dailyCount = 0;
       this.dailyResetAt = this.nextMidnight();
@@ -46,29 +47,21 @@ export class RateLimiter {
       await new Promise<void>((resolve) => setTimeout(resolve, this.currentBackoffMs));
     }
 
-    this.dailyCount++;
-  }
-
-  applyBackoff(): void {
-    this.currentBackoffMs = Math.min(
-      (this.currentBackoffMs || 1000) * this.backoffMultiplier,
-      this.maxBackoffMs
-    );
-  }
-
-  resetBackoff(): void {
-    this.currentBackoffMs = 0;
-  }
-
-  async execute<T>(fn: () => Promise<T>): Promise<T> {
-    await this.acquire();
     try {
+      this.dailyCount++;
       const result = await fn();
-      this.resetBackoff();
+      this.currentBackoffMs = 0;
       return result;
     } catch (err) {
       if (err instanceof RateLimitError) {
-        this.applyBackoff();
+        const computedBackoffMs = this.currentBackoffMs
+          ? this.currentBackoffMs * this.backoffMultiplier
+          : 3000;
+        const retryAfterMs = err.retryAfterMs ?? 0;
+        this.currentBackoffMs = Math.min(
+          Math.max(computedBackoffMs, retryAfterMs),
+          this.maxBackoffMs
+        );
       }
       throw err;
     }
