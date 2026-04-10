@@ -18,7 +18,8 @@ This document defines the MVP automation for issue hygiene and triage.
   - Upserts an intake checklist comment
 
 - `.github/workflows/issue-triage.yml`
-  - Trigger: issue opened/reopened/edited/unlabeled
+  - Trigger: issue opened/reopened/edited and `status:ready-for-triage` labeled
+  - Runs only when intake marks `status:ready-for-triage`
   - Applies type, area, severity, and priority labels
   - Suggests owner via triage summary comment
   - Flags low confidence with `needs-human-triage`

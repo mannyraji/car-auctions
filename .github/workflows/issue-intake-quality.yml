@@ -1,5 +1,9 @@
 name: Issue Intake Quality
 
+concurrency:
+  group: intake-triage-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 on:
   issues:
     types: [opened, edited, reopened]
@@ -79,7 +83,13 @@ jobs:
                 await github.rest.issues.getLabel({ owner, repo, name });
               } catch (error) {
                 if (error.status === 404) {
-                  await github.rest.issues.createLabel({ owner, repo, name, color, description });
+                  try {
+                    await github.rest.issues.createLabel({ owner, repo, name, color, description });
+                  } catch (createError) {
+                    if (createError.status !== 422) {
+                      throw createError;
+                    }
+                  }
                 } else {
                   throw error;
                 }
