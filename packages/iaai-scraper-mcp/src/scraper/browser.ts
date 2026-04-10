@@ -19,7 +19,7 @@ export class IaaiBrowser {
   private browser: import('playwright').Browser | null = null;
   private context: BrowserContext | null = null;
   private launchPromise: Promise<void> | null = null;
-  private _reauthing = false;
+  private _reauthPromise: Promise<void> | null = null;
 
   async launch(): Promise<void> {
     if (this.browser) return;
@@ -179,6 +179,7 @@ export class IaaiBrowser {
   /**
    * Get a new page from the browser context.
    * If the page is redirected to the login page, re-authenticates once.
+   * The response listener is cleaned up when the page closes.
    */
   async getPage(): Promise<Page> {
     await this.launch();
@@ -186,28 +187,35 @@ export class IaaiBrowser {
 
     const page = await this.context.newPage();
 
-    // Detect redirect to login and re-authenticate once (guarded against concurrent attempts)
-    page.on('response', (response) => {
+    // Detect redirect to login and re-authenticate once (Promise-based guard prevents concurrent attempts)
+    const onResponse = (response: import('playwright').Response) => {
       try {
         const parsed = new URL(response.url());
         const isLoginRedirect =
           parsed.hostname === 'www.iaai.com' && parsed.pathname === '/Account/Login';
-        if (!isLoginRedirect || this._reauthing) return;
+        if (!isLoginRedirect || this._reauthPromise) return;
 
         const email = process.env['IAAI_EMAIL'];
         const password = process.env['IAAI_PASSWORD'];
         if (email && password) {
-          this._reauthing = true;
-          this.authenticate(email, password)
-            .catch(() => {})
+          this._reauthPromise = this.authenticate(email, password)
+            .catch((err) => {
+              console.warn(
+                '[IaaiBrowser] Re-authentication failed:',
+                err instanceof Error ? err.message : err
+              );
+            })
             .finally(() => {
-              this._reauthing = false;
+              this._reauthPromise = null;
             });
         }
       } catch {
         // Ignore malformed URLs
       }
-    });
+    };
+
+    page.on('response', onResponse);
+    page.once('close', () => page.removeListener('response', onResponse));
 
     return page;
   }
