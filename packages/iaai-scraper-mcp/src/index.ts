@@ -75,34 +75,80 @@ async function main(): Promise<void> {
 
   // 3. Instantiate all dependencies
   const browser = new IaaiBrowser();
-  const cache = new IaaiSqliteCache();
-  const memoryCache = new MemoryCache();
-  const imageCache = new ImageCache();
-  const rateLimiter = new RateLimiter(config.rateLimit);
-  const client = new IaaiClient(browser, cache, memoryCache, imageCache, rateLimiter, config);
-
-  // 5. Select transport from TRANSPORT env var ("ws" is normalized to "websocket")
-  const transport = resolveTransport();
-
-  // Graceful shutdown — guard ensures cleanup runs at most once
   let shuttingDown = false;
-  const shutdown = async (): Promise<void> => {
+  let startupComplete = false;
+
+  const closeResources = async (): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
+
+    let closeError: unknown;
+
     try {
-      await cleanupResources(browser, cache);
-      process.exit(0);
+      await browser.close();
     } catch (err) {
-      console.error('Error during shutdown:', err);
-      process.exit(1);
+      closeError = err;
+    }
+
+    try {
+      cache.close();
+    } catch (err) {
+      if (closeError === undefined) {
+        closeError = err;
+      } else {
+        console.error('Error closing cache during shutdown:', err);
+      }
+    }
+
+    if (closeError !== undefined) {
+      throw closeError;
     }
   };
-  process.on('SIGINT', () => {
-    shutdown().catch(console.error);
-  });
-  process.on('SIGTERM', () => {
-    shutdown().catch(console.error);
-  });
+
+  try {
+    // 5. Select transport from TRANSPORT env var ("ws" is normalized to "websocket")
+    const rawTransport = process.env['TRANSPORT'] ?? 'stdio';
+    const transport: McpServerOptions['transport'] =
+      rawTransport === 'ws' ? 'websocket' : (rawTransport as McpServerOptions['transport']);
+
+    // 4 & 6. Build the MCP server and start listening on the selected transport
+    await createServer({ client, cache, imageCache }, transport);
+    startupComplete = true;
+
+    // Graceful shutdown — guard ensures cleanup runs at most once
+    const shutdown = async (): Promise<void> => {
+      try {
+        await closeResources();
+        process.exitCode = 0;
+      } catch (err) {
+        console.error('Error during shutdown:', err);
+        process.exitCode = 1;
+      }
+    };
+
+    process.on('SIGINT', () => {
+      shutdown()
+        .catch(console.error)
+        .finally(() => {
+          process.exit(process.exitCode ?? 0);
+        });
+    });
+    process.on('SIGTERM', () => {
+      shutdown()
+        .catch(console.error)
+        .finally(() => {
+          process.exit(process.exitCode ?? 0);
+        });
+    });
+  } finally {
+    if (!startupComplete) {
+      try {
+        await closeResources();
+      } catch (err) {
+        console.error('Error during startup cleanup:', err);
+      }
+    }
+  }
 
   try {
     // 4 & 6. Build the MCP server and start listening on the selected transport
