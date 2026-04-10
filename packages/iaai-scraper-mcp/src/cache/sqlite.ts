@@ -254,6 +254,12 @@ export class IaaiSqliteCache {
       .run(entry.lot_number, entry.field, entry.old_value, entry.new_value, entry.detected_at);
   }
 
+  watchlistGetHistory(lotNumber: string): WatchlistHistoryEntry[] {
+    return this.db
+      .prepare('SELECT * FROM watchlist_history WHERE lot_number = ? ORDER BY detected_at DESC')
+      .all(lotNumber) as WatchlistHistoryEntry[];
+  }
+
   close(): void {
     this.db.close();
   }

@@ -225,7 +225,9 @@ describe('IaaiSqliteCache', () => {
       detected_at: new Date().toISOString(),
     });
     cache.watchlistRemove('LOT-I');
-    // After cascade delete the parent is gone; this should not throw
+    // Parent row is gone
     expect(cache.watchlistGet('LOT-I')).toBeNull();
+    // History rows must also be gone (ON DELETE CASCADE)
+    expect(cache.watchlistGetHistory('LOT-I')).toHaveLength(0);
   });
 });

@@ -37,6 +37,9 @@ describe('randomDelay', () => {
 
 // ─── simulateMouseMovement ────────────────────────────────────────────────────
 
+/** Instant timer that executes the callback synchronously — eliminates real delays in tests. */
+const noopTimer = (fn: () => void, _ms: number) => fn();
+
 describe('simulateMouseMovement', () => {
   it('calls page.mouse.move and page.mouse.wheel at least once', async () => {
     const moveSpy = vi.fn().mockResolvedValue(undefined);
@@ -45,7 +48,7 @@ describe('simulateMouseMovement', () => {
       mouse: { move: moveSpy, wheel: wheelSpy },
     } as unknown as import('playwright').Page;
 
-    await simulateMouseMovement(mockPage);
+    await simulateMouseMovement(mockPage, noopTimer);
 
     expect(moveSpy).toHaveBeenCalled();
     expect(wheelSpy).toHaveBeenCalled();
@@ -58,7 +61,7 @@ describe('simulateMouseMovement', () => {
       mouse: { move: moveSpy, wheel: wheelSpy },
     } as unknown as import('playwright').Page;
 
-    await simulateMouseMovement(mockPage);
+    await simulateMouseMovement(mockPage, noopTimer);
 
     for (const [x, y] of moveSpy.mock.calls) {
       expect(x).toBeGreaterThanOrEqual(100);
