@@ -19,15 +19,18 @@ export async function createCopartServer(
   imageCache: ImageCache,
   vinCache: VinCache
 ): Promise<void> {
-  const server = await createMcpServer({
-    name: 'copart-scraper-mcp',
-    version: '0.1.0',
-  });
-
-  server.tool('copart_search', searchSchema, createSearchHandler(client));
-  server.tool('copart_get_listing', listingSchema, createListingHandler(client));
-  server.tool('copart_get_images', imagesSchema, createImagesHandler(client, imageCache));
-  server.tool('copart_decode_vin', vinSchema, createVinHandler(vinCache));
-  server.tool('copart_watch_listing', watchlistSchema, createWatchlistHandler(cache));
-  server.tool('copart_sold_history', soldSchema, createSoldHandler(client));
+  await createMcpServer(
+    {
+      name: 'copart-scraper-mcp',
+      version: '0.1.0',
+    },
+    (server) => {
+      server.tool('copart_search', searchSchema, createSearchHandler(client));
+      server.tool('copart_get_listing', listingSchema, createListingHandler(client));
+      server.tool('copart_get_images', imagesSchema, createImagesHandler(client, imageCache));
+      server.tool('copart_decode_vin', vinSchema, createVinHandler(vinCache));
+      server.tool('copart_watch_listing', watchlistSchema, createWatchlistHandler(cache));
+      server.tool('copart_sold_history', soldSchema, createSoldHandler(client));
+    }
+  );
 }

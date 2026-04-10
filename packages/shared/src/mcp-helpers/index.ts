@@ -22,6 +22,8 @@ interface McpServerInstance {
   tool(name: string, ...args: unknown[]): void;
 }
 
+type ConfigureServer = (server: McpServerInstance) => void | Promise<void>;
+
 /** Resolve the WebSocketServer constructor from the `ws` module, handling both CJS export shapes. */
 function getWebSocketServerConstructor(
   ws: typeof import('ws')
@@ -37,7 +39,10 @@ function getWebSocketServerConstructor(
  * const server = await createMcpServer({ name: 'copart-mcp', version: '0.1.0' });
  * server.tool('search', { q: z.string() }, async ({ q }) => ({ content: [...] }));
  */
-export async function createMcpServer(options: McpServerOptions): Promise<McpServerInstance> {
+export async function createMcpServer(
+  options: McpServerOptions,
+  configureServer?: ConfigureServer
+): Promise<McpServerInstance> {
   const transportMode = options.transport ?? (process.env['TRANSPORT'] || 'stdio');
 
   // Use dynamic import so Vitest can mock these modules in tests
@@ -46,6 +51,10 @@ export async function createMcpServer(options: McpServerOptions): Promise<McpSer
   };
 
   const server = new McpServer({ name: options.name, version: options.version });
+
+  if (configureServer) {
+    await configureServer(server);
+  }
 
   switch (transportMode) {
     case 'stdio': {
