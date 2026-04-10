@@ -1,0 +1,82 @@
+name: Labels Sync
+
+on:
+  push:
+    branches: [main, github-issue-management-mvp]
+    paths:
+      - ".github/labels.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync-labels:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync labels from labels.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          LABELS_FILE=".github/labels.yml"
+
+          if [[ ! -f "$LABELS_FILE" ]]; then
+            echo "Error: $LABELS_FILE not found."
+            exit 1
+          fi
+
+          # Parse labels.yml with Python (available on ubuntu-latest by default)
+          python3 - <<'PYEOF'
+          import json, subprocess, sys
+          try:
+            import yaml
+          except ImportError:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "pyyaml"])
+            import yaml
+
+          import os
+
+          with open(".github/labels.yml") as f:
+            data = yaml.safe_load(f)
+
+          labels = data.get("labels", [])
+          repo = os.environ["REPO"]
+
+          ok = 0
+          failed = 0
+
+          for label in labels:
+            name = label["name"]
+            color = label["color"].lstrip("#")
+            description = label.get("description", "")
+
+            result = subprocess.run(
+              [
+                "gh", "label", "create", name,
+                "--color", color,
+                "--description", description,
+                "--repo", repo,
+                "--force",
+              ],
+              capture_output=True,
+              text=True,
+            )
+
+            if result.returncode == 0:
+              print(f"  synced: {name}")
+              ok += 1
+            else:
+              print(f"  FAILED: {name} — {result.stderr.strip()}", file=sys.stderr)
+              failed += 1
+
+          print(f"\nSync complete: {ok} synced, {failed} failed.")
+          if failed > 0:
+            sys.exit(1)
+          PYEOF

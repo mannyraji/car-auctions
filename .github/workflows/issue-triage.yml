@@ -300,7 +300,10 @@ jobs:
               await github.rest.issues.addLabels({ owner, repo, issue_number, labels: ["needs-human-triage"] });
             } else {
               await removeLabel("needs-human-triage");
+              await github.rest.issues.addAssignees({ owner, repo, issue_number, assignees: ["mannyraji"] });
             }
+
+            await removeLabel("status:ready-for-triage");
 
             const areaOwners = {
               "area:shared": ["@mannyraji"],

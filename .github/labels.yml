@@ -1,0 +1,124 @@
+# Single source of truth for all repository labels.
+# Apply with: gh workflow run labels-sync.yml
+# Or pushed changes trigger the sync workflow automatically.
+
+labels:
+  # ── Type ────────────────────────────────────────────────────────────────────
+  - name: "type:bug"
+    color: "d73a4a"
+    description: "Bug report"
+
+  - name: "type:feature"
+    color: "0e8a16"
+    description: "Feature request"
+
+  - name: "type:docs"
+    color: "0075ca"
+    description: "Documentation change"
+
+  # ── Area ────────────────────────────────────────────────────────────────────
+  - name: "area:shared"
+    color: "5319e7"
+    description: "Shared package"
+
+  - name: "area:copart-scraper-mcp"
+    color: "1d76db"
+    description: "Copart scraper package"
+
+  - name: "area:iaai-scraper-mcp"
+    color: "0052cc"
+    description: "IAAI scraper package"
+
+  - name: "area:docs"
+    color: "0366d6"
+    description: "Documentation"
+
+  - name: "area:infra"
+    color: "6f42c1"
+    description: "Infrastructure / CI"
+
+  - name: "area:unknown"
+    color: "d4c5f9"
+    description: "Unknown area"
+
+  # ── Severity ─────────────────────────────────────────────────────────────────
+  - name: "severity:critical"
+    color: "b60205"
+    description: "Critical severity"
+
+  - name: "severity:high"
+    color: "d93f0b"
+    description: "High severity"
+
+  - name: "severity:medium"
+    color: "fbca04"
+    description: "Medium severity"
+
+  - name: "severity:low"
+    color: "c2e0c6"
+    description: "Low severity"
+
+  # ── Priority ─────────────────────────────────────────────────────────────────
+  - name: "priority:p1"
+    color: "b60205"
+    description: "Top priority"
+
+  - name: "priority:p2"
+    color: "d93f0b"
+    description: "Required priority"
+
+  - name: "priority:p3"
+    color: "0e8a16"
+    description: "Nice-to-have priority"
+
+  # ── Status ───────────────────────────────────────────────────────────────────
+  - name: "status:ready-for-triage"
+    color: "bfd4f2"
+    description: "Issue intake complete and ready for triage"
+
+  - name: "status:triaged"
+    color: "1f883d"
+    description: "Issue has been triaged and assigned"
+
+  - name: "status:in-progress"
+    color: "0075ca"
+    description: "A pull request is actively addressing this issue"
+
+  - name: "status:done"
+    color: "581c87"
+    description: "Issue resolved and merged"
+
+  # ── Triage signals ───────────────────────────────────────────────────────────
+  - name: "needs-info"
+    color: "e4e669"
+    description: "Issue is missing required intake fields"
+
+  - name: "needs-human-triage"
+    color: "fef2c0"
+    description: "Issue requires human triage review"
+
+  - name: "triage:owner-suggested"
+    color: "bfdadc"
+    description: "Owner suggestion has been posted"
+
+  # ── Duplicates ───────────────────────────────────────────────────────────────
+  - name: "duplicate:suspect"
+    color: "cccccc"
+    description: "Potential duplicate — awaiting human review"
+
+  - name: "duplicate:confirmed"
+    color: "cccccc"
+    description: "Confirmed duplicate — will be auto-closed"
+
+  # ── SLA / Escalation ─────────────────────────────────────────────────────────
+  - name: "sla:breached-first-response"
+    color: "e11d48"
+    description: "First response SLA has been breached"
+
+  - name: "sla:breached-resolution"
+    color: "be123c"
+    description: "Resolution SLA has been breached"
+
+  - name: "escalation:critical"
+    color: "7f1d1d"
+    description: "Critical issue requiring immediate escalation"

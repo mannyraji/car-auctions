@@ -1,0 +1,157 @@
+name: PR Issue Lifecycle
+
+concurrency:
+  group: pr-issue-lifecycle-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+on:
+  pull_request:
+    types: [opened, reopened, closed]
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  update-linked-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update linked issue status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = pr.number;
+            const prBody = pr.body || "";
+            const action = context.payload.action;
+            const isMerged = pr.merged === true;
+
+            // Extract all "Closes/Fixes/Resolves #N" references from the PR body
+            const issueRefs = [];
+            const pattern = /(?:closes?|fixes?|resolves?)\s+#(\d+)/gi;
+            let match;
+            while ((match = pattern.exec(prBody)) !== null) {
+              issueRefs.push(parseInt(match[1], 10));
+            }
+
+            if (issueRefs.length === 0) {
+              console.log("No issue references found in PR body.");
+              return;
+            }
+
+            console.log(`PR #${prNumber} references issues: ${issueRefs.join(", ")}`);
+
+            const marker = `<!-- pr-lifecycle-${prNumber} -->`;
+
+            async function ensureLabel(name, color, description) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name });
+              } catch (error) {
+                if (error.status === 404) {
+                  try {
+                    await github.rest.issues.createLabel({ owner, repo, name, color, description });
+                  } catch (createError) {
+                    if (createError.status !== 422) throw createError;
+                  }
+                } else {
+                  throw error;
+                }
+              }
+            }
+
+            async function addLabel(issue_number, name) {
+              try {
+                await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [name] });
+              } catch (error) {
+                if (error.status !== 422) throw error;
+              }
+            }
+
+            async function removeLabel(issue_number, name) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+            }
+
+            async function upsertMarkerComment(issue_number, bodyText) {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number,
+                per_page: 100,
+              });
+              const existing = comments.find(
+                (c) =>
+                  (c.user?.type === "Bot" || c.user?.login === "github-actions[bot]") &&
+                  (c.body || "").includes(marker)
+              );
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: existing.id,
+                  body: bodyText,
+                });
+                return;
+              }
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: bodyText });
+            }
+
+            // Ensure lifecycle labels exist before using them
+            await ensureLabel("status:in-progress", "0075ca", "A pull request is actively addressing this issue");
+            await ensureLabel("status:done", "581c87", "Issue resolved and merged");
+
+            for (const issue_number of issueRefs) {
+              // Verify the issue exists
+              try {
+                await github.rest.issues.get({ owner, repo, issue_number });
+              } catch (error) {
+                console.log(`Issue #${issue_number} not found or inaccessible, skipping.`);
+                continue;
+              }
+
+              if (action === "opened" || action === "reopened") {
+                await addLabel(issue_number, "status:in-progress");
+                await removeLabel(issue_number, "status:triaged");
+                await removeLabel(issue_number, "status:ready-for-triage");
+                await upsertMarkerComment(
+                  issue_number,
+                  [
+                    marker,
+                    `**PR #${prNumber} is now addressing this issue.**`,
+                    ``,
+                    `Track progress: [#${prNumber} — ${pr.title}](${pr.html_url})`,
+                  ].join("\n")
+                );
+              } else if (action === "closed" && isMerged) {
+                await addLabel(issue_number, "status:done");
+                await removeLabel(issue_number, "status:in-progress");
+                await upsertMarkerComment(
+                  issue_number,
+                  [
+                    marker,
+                    `**PR #${prNumber} has been merged. This issue is resolved.**`,
+                    ``,
+                    `Closed by: [#${prNumber} — ${pr.title}](${pr.html_url})`,
+                  ].join("\n")
+                );
+              } else if (action === "closed" && !isMerged) {
+                await removeLabel(issue_number, "status:in-progress");
+                await addLabel(issue_number, "status:triaged");
+                await upsertMarkerComment(
+                  issue_number,
+                  [
+                    marker,
+                    `**PR #${prNumber} was closed without merging. This issue is back in triage.**`,
+                    ``,
+                    `Closed PR: [#${prNumber} — ${pr.title}](${pr.html_url})`,
+                  ].join("\n")
+                );
+              }
+            }
