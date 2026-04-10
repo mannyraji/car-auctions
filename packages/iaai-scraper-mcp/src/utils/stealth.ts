@@ -65,6 +65,13 @@ export async function randomDelay(
   maxMs = 5000,
   timer: (fn: () => void, ms: number) => void = setTimeout
 ): Promise<void> {
+  if (!Number.isFinite(minMs) || !Number.isFinite(maxMs)) {
+    throw new TypeError('randomDelay requires finite minMs and maxMs values');
+  }
+
+  if (minMs > maxMs) {
+    throw new RangeError('randomDelay requires minMs to be less than or equal to maxMs');
+  }
   const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
   await new Promise<void>((resolve) => timer(resolve, ms));
 }
