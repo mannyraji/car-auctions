@@ -14,8 +14,8 @@ import {
   extractImageUrls,
   parseDomSearch,
 } from './parser.js';
-import { randomDelay, simulateMouseMovement, isCaptchaPage, isLoginPage } from '../utils/stealth.js';
-import { fetchImageAsBase64 } from '../utils/image-utils.js';
+import { randomDelay, simulateMouseMovement, isCaptchaPage } from '../utils/stealth.js';
+import { resizeAndCompress } from '../utils/image-utils.js';
 import type {
   IaaiSearchParams,
   IaaiSoldParams,
@@ -87,32 +87,23 @@ export class IaaiClient {
       const p = await this.browser.getPage();
       page = p;
       const interceptor = new IaaiInterceptor();
-      interceptor.attach(p);
 
       const url = this.buildSearchUrl(params);
 
-      // Call RateLimiter.acquire() before navigation
-      if (this.rateLimiter) await this.rateLimiter.acquire();
+      // Set up intercept BEFORE navigation so route handler is registered first
+      const interceptPromise = interceptor.interceptSearch(p, params);
 
-      const response = await p.goto(url, { waitUntil: 'networkidle', timeout: NAV_TIMEOUT });
+      await this.navigate(p, url);
 
-      if (!response) throw new ScraperError('No response from IAAI search page');
-      if (response.status() === 429 || response.status() === 403) {
-        if (this.rateLimiter) this.rateLimiter.applyBackoff();
-        throw new RateLimitError(`HTTP ${response.status()} from IAAI`, 60000);
-      }
-
-      // Call isCaptchaPage() after navigation
-      const pageUrl = p.url();
-      const content = await p.content();
-      if (isCaptchaPage(pageUrl, content)) {
+      if (await isCaptchaPage(p)) {
         throw new CaptchaError('IAAI CAPTCHA detected on search page');
       }
 
       await simulateMouseMovement(p);
       await randomDelay(1000, 2000);
 
-      let rawItems = interceptor.getSearchResult()?.items ?? [];
+      const intercepted = await interceptPromise;
+      let rawItems: IaaiRawStockData[] = intercepted?.items ?? [];
 
       if (rawItems.length === 0) {
         rawItems = await parseDomSearch(p);
@@ -130,7 +121,6 @@ export class IaaiClient {
       this.memoryCache.set(cacheKey, listings);
       await this.cache.setSearch(cacheKey, listings);
 
-      if (this.rateLimiter) this.rateLimiter.resetBackoff();
       return { data: listings, cached: false, stale: false, cachedAt: null };
     } catch (err) {
       if (err instanceof CaptchaError || err instanceof RateLimitError) throw err;
@@ -169,35 +159,25 @@ export class IaaiClient {
       const p = await this.browser.getPage();
       page = p;
       const interceptor = new IaaiInterceptor();
-      interceptor.attach(p);
 
       const url = `${BASE_URL}/VehicleDetail/${stockNumber}`;
 
-      // Call RateLimiter.acquire() before navigation
-      if (this.rateLimiter) await this.rateLimiter.acquire();
+      // Set up intercept BEFORE navigation
+      const interceptPromise = interceptor.interceptListing(p, stockNumber);
 
-      const response = await p.goto(url, { waitUntil: 'networkidle', timeout: NAV_TIMEOUT });
+      await this.navigate(p, url, (status) => {
+        if (status === 404)
+          throw new ScraperError(`Stock number ${stockNumber} not found`, 'SCRAPER_ERROR', false);
+      });
 
-      if (!response) throw new ScraperError('No response from IAAI listing page');
-      if (response.status() === 404) {
-        throw new ScraperError(`Stock number ${stockNumber} not found`, 'SCRAPER_ERROR', false);
-      }
-      if (response.status() === 429 || response.status() === 403) {
-        if (this.rateLimiter) this.rateLimiter.applyBackoff();
-        throw new RateLimitError(`HTTP ${response.status()} from IAAI`, 60000);
-      }
-
-      // Call isCaptchaPage() after navigation
-      const pageUrl = p.url();
-      const content = await p.content();
-      if (isCaptchaPage(pageUrl, content)) {
+      if (await isCaptchaPage(p)) {
         throw new CaptchaError('IAAI CAPTCHA detected on listing page');
       }
 
       await simulateMouseMovement(p);
       await randomDelay(500, 1500);
 
-      const interceptedRaw = interceptor.getListing();
+      const interceptedRaw = await interceptPromise;
       let listing: AuctionListing;
 
       if (interceptedRaw) {
@@ -210,7 +190,6 @@ export class IaaiClient {
 
       await this.cache.setListing(stockNumber, listing);
 
-      if (this.rateLimiter) this.rateLimiter.resetBackoff();
       return { data: listing, cached: false, stale: false, cachedAt: null };
     } catch (err) {
       if (err instanceof CaptchaError || err instanceof RateLimitError) throw err;
@@ -262,31 +241,27 @@ export class IaaiClient {
         const p = await this.browser.getPage();
         page = p;
         const interceptor = new IaaiInterceptor();
-        interceptor.attach(p);
 
         const url = `${BASE_URL}/VehicleDetail/${stockNumber}`;
 
-        // Call RateLimiter.acquire() before navigation
-        if (this.rateLimiter) await this.rateLimiter.acquire();
+        // Set up intercept BEFORE navigation
+        const interceptPromise = interceptor.interceptListing(p, stockNumber);
 
-        await p.goto(url, { waitUntil: 'networkidle', timeout: NAV_TIMEOUT });
+        await this.navigate(p, url);
 
-        const pageUrl = p.url();
-        const content = await p.content();
-
-        if (isCaptchaPage(pageUrl, content)) {
+        if (await isCaptchaPage(p)) {
           throw new CaptchaError('IAAI CAPTCHA detected fetching images');
         }
 
         // Detect session expiry (redirect to login)
-        if (isLoginPage(pageUrl)) {
+        if (p.url().toLowerCase().includes('/account/login')) {
           return { urls: [], sessionExpired: true };
         }
 
         await randomDelay(500, 1500);
 
         let urls: string[] = [];
-        const interceptedRaw = interceptor.getListing();
+        const interceptedRaw = await interceptPromise;
         if (interceptedRaw) {
           urls = extractImageUrls(interceptedRaw);
         }
@@ -299,7 +274,6 @@ export class IaaiClient {
           }
         }
 
-        if (this.rateLimiter) this.rateLimiter.resetBackoff();
         return { urls, sessionExpired: false };
       } finally {
         if (page) await page.close().catch(() => {});
@@ -386,25 +360,21 @@ export class IaaiClient {
       const p = await this.browser.getPage();
       page = p;
       const interceptor = new IaaiInterceptor();
-      interceptor.attach(p);
 
       const url = this.buildSoldUrl(params);
 
-      // Call RateLimiter.acquire() before navigation
-      if (this.rateLimiter) await this.rateLimiter.acquire();
+      // Set up intercept BEFORE navigation
+      const interceptPromise = interceptor.interceptSold(p, params);
 
-      await p.goto(url, { waitUntil: 'networkidle', timeout: NAV_TIMEOUT });
+      await this.navigate(p, url);
 
-      // Call isCaptchaPage() after navigation
-      const pageUrl = p.url();
-      const content = await p.content();
-      if (isCaptchaPage(pageUrl, content)) {
+      if (await isCaptchaPage(p)) {
         throw new CaptchaError('IAAI CAPTCHA detected on sold history page');
       }
 
       await randomDelay(500, 1500);
 
-      const intercepted = interceptor.getSearchResult();
+      const intercepted = await interceptPromise;
       let soldEntries = intercepted ? parseSoldResults({ items: intercepted.items }) : [];
 
       if (soldEntries.length === 0) {
@@ -420,7 +390,6 @@ export class IaaiClient {
 
       await this.cache.setSoldHistory(cacheKey, response);
 
-      if (this.rateLimiter) this.rateLimiter.resetBackoff();
       return { data: response, cached: false, stale: false, cachedAt: null };
     } catch (err) {
       if (err instanceof CaptchaError || err instanceof RateLimitError) throw err;
@@ -543,7 +512,30 @@ export class IaaiClient {
 
     const entries: IaaiImageEntry[] = await Promise.all(
       urls.map(async (url, idx) => {
-        const base64 = await fetchImageAsBase64(url, this.imageCache);
+        const cached = await this.imageCache.get(url);
+        let base64: string | null;
+        if (cached) {
+          base64 = `data:image/webp;base64,${cached.toString('base64')}`;
+        } else {
+          try {
+            const res = await fetch(url, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              },
+              signal: AbortSignal.timeout(15000),
+            });
+            if (!res.ok) {
+              base64 = null;
+            } else {
+              const buf = Buffer.from(await res.arrayBuffer());
+              const { buffer: compressed } = await resizeAndCompress(buf);
+              await this.imageCache.set(url, compressed);
+              base64 = `data:image/webp;base64,${compressed.toString('base64')}`;
+            }
+          } catch {
+            base64 = null;
+          }
+        }
         return {
           url,
           category: this.inferCategory(url, idx),
@@ -553,6 +545,27 @@ export class IaaiClient {
     );
 
     return entries;
+  }
+
+  private async navigate(
+    p: import('playwright').Page,
+    url: string,
+    onStatus?: (status: number) => void
+  ): Promise<void> {
+    const doNav = async () => {
+      const response = await p.goto(url, { waitUntil: 'networkidle', timeout: NAV_TIMEOUT });
+      if (!response) throw new ScraperError('No response from IAAI');
+      const status = response.status();
+      if (status === 429 || status === 403) {
+        throw new RateLimitError(`HTTP ${status} from IAAI`, 60000);
+      }
+      if (onStatus) onStatus(status);
+    };
+    if (this.rateLimiter) {
+      await this.rateLimiter.execute(doNav);
+    } else {
+      await doNav();
+    }
   }
 
   private inferCategory(url: string, index: number): string {

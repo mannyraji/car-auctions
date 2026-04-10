@@ -98,12 +98,14 @@ export function parseListingDetail(raw: unknown): IaaiRawStockData {
 
   const data = raw as Record<string, unknown>;
 
-  // Unwrap optional data/lot wrappers
+  // Unwrap optional data/lot/stockDetails wrappers
   let stock: Record<string, unknown>;
   if (isPlainObject(data['data'])) {
     stock = data['data'] as Record<string, unknown>;
   } else if (isPlainObject(data['lot'])) {
     stock = data['lot'] as Record<string, unknown>;
+  } else if (isPlainObject(data['stockDetails'])) {
+    stock = data['stockDetails'] as Record<string, unknown>;
   } else {
     stock = data;
   }

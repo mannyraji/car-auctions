@@ -1,4 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+vi.mock('../src/scraper/interceptor.js', () => ({
+  IaaiInterceptor: vi.fn(() => ({
+    interceptSearch: vi.fn().mockResolvedValue(null),
+    interceptListing: vi.fn().mockResolvedValue(null),
+    interceptSold: vi.fn().mockResolvedValue(null),
+  })),
+}));
+
 import {
   parseSearchResults,
   parseListingDetail,
@@ -9,7 +17,7 @@ import {
 import { IaaiClient } from '../src/scraper/iaai-client.js';
 import { ScraperError, CaptchaError, RateLimitError } from '@car-auctions/shared';
 import type { AuctionListing } from '@car-auctions/shared';
-import type { ScraperResult, IaaiSoldEntry, SoldHistoryResponse } from '../src/types/index.js';
+import type { IaaiSoldEntry, SoldHistoryResponse } from '../src/types/index.js';
 import searchFixture from './fixtures/iaai-search-response.json';
 import listingFixture from './fixtures/iaai-listing-response.json';
 import soldFixture from './fixtures/iaai-sold-response.json';
@@ -99,11 +107,46 @@ describe('parseSoldResults', () => {
 describe('computeAggregates', () => {
   it('computes correct aggregates from sold entries', () => {
     const entries: IaaiSoldEntry[] = [
-      { lot_number: 'A', sale_date: '', final_bid: 4200, damage_primary: '', odometer: null, title_type: '' },
-      { lot_number: 'B', sale_date: '', final_bid: 5800, damage_primary: '', odometer: null, title_type: '' },
-      { lot_number: 'C', sale_date: '', final_bid: null, damage_primary: '', odometer: null, title_type: '' },
-      { lot_number: 'D', sale_date: '', final_bid: 7100, damage_primary: '', odometer: null, title_type: '' },
-      { lot_number: 'E', sale_date: '', final_bid: 3500, damage_primary: '', odometer: null, title_type: '' },
+      {
+        lot_number: 'A',
+        sale_date: '',
+        final_bid: 4200,
+        damage_primary: '',
+        odometer: null,
+        title_type: '',
+      },
+      {
+        lot_number: 'B',
+        sale_date: '',
+        final_bid: 5800,
+        damage_primary: '',
+        odometer: null,
+        title_type: '',
+      },
+      {
+        lot_number: 'C',
+        sale_date: '',
+        final_bid: null,
+        damage_primary: '',
+        odometer: null,
+        title_type: '',
+      },
+      {
+        lot_number: 'D',
+        sale_date: '',
+        final_bid: 7100,
+        damage_primary: '',
+        odometer: null,
+        title_type: '',
+      },
+      {
+        lot_number: 'E',
+        sale_date: '',
+        final_bid: 3500,
+        damage_primary: '',
+        odometer: null,
+        title_type: '',
+      },
     ];
     const agg = computeAggregates(entries);
     expect(agg.count).toBe(4); // null excluded
@@ -115,7 +158,14 @@ describe('computeAggregates', () => {
 
   it('returns all zeros when all finalBids are null', () => {
     const entries: IaaiSoldEntry[] = [
-      { lot_number: 'X', sale_date: '', final_bid: null, damage_primary: '', odometer: null, title_type: '' },
+      {
+        lot_number: 'X',
+        sale_date: '',
+        final_bid: null,
+        damage_primary: '',
+        odometer: null,
+        title_type: '',
+      },
     ];
     const agg = computeAggregates(entries);
     expect(agg.count).toBe(0);
@@ -132,9 +182,30 @@ describe('computeAggregates', () => {
 
   it('computes median correctly for odd-length array', () => {
     const entries: IaaiSoldEntry[] = [
-      { lot_number: 'A', sale_date: '', final_bid: 1000, damage_primary: '', odometer: null, title_type: '' },
-      { lot_number: 'B', sale_date: '', final_bid: 2000, damage_primary: '', odometer: null, title_type: '' },
-      { lot_number: 'C', sale_date: '', final_bid: 3000, damage_primary: '', odometer: null, title_type: '' },
+      {
+        lot_number: 'A',
+        sale_date: '',
+        final_bid: 1000,
+        damage_primary: '',
+        odometer: null,
+        title_type: '',
+      },
+      {
+        lot_number: 'B',
+        sale_date: '',
+        final_bid: 2000,
+        damage_primary: '',
+        odometer: null,
+        title_type: '',
+      },
+      {
+        lot_number: 'C',
+        sale_date: '',
+        final_bid: 3000,
+        damage_primary: '',
+        odometer: null,
+        title_type: '',
+      },
     ];
     const agg = computeAggregates(entries);
     expect(agg.median_final_bid).toBe(2000);
@@ -144,10 +215,7 @@ describe('computeAggregates', () => {
 describe('extractImageUrls', () => {
   it('extracts URLs from array format', () => {
     const raw = {
-      imageUrls: [
-        'https://vg.iaai.com/img1.jpg',
-        'https://vg.iaai.com/img2.jpg',
-      ],
+      imageUrls: ['https://vg.iaai.com/img1.jpg', 'https://vg.iaai.com/img2.jpg'],
     };
     const urls = extractImageUrls(raw as never);
     expect(urls).toHaveLength(2);
@@ -236,14 +304,6 @@ const mockSoldResponse: SoldHistoryResponse = {
   },
 };
 
-function freshResult<T>(data: T): ScraperResult<T> {
-  return { data, cached: false, stale: false, cachedAt: null };
-}
-
-function staleResult<T>(data: T, cachedAt: string): ScraperResult<T> {
-  return { data, cached: true, stale: true, cachedAt };
-}
-
 function makeMockBrowser() {
   return {
     getPage: vi.fn(),
@@ -257,13 +317,19 @@ function makeMockPage() {
   return {
     goto: vi.fn().mockResolvedValue({ status: () => 200 }),
     url: vi.fn().mockReturnValue('https://www.iaai.com/Search'),
+    title: vi.fn().mockResolvedValue(''),
     content: vi.fn().mockResolvedValue('<html><body>results</body></html>'),
     close: vi.fn().mockResolvedValue(undefined),
+    route: vi.fn().mockResolvedValue(undefined),
+    unroute: vi.fn().mockResolvedValue(undefined),
     on: vi.fn(),
     removeListener: vi.fn(),
     removeAllListeners: vi.fn(),
     evaluate: vi.fn().mockResolvedValue(null),
-    mouse: { move: vi.fn().mockResolvedValue(undefined), wheel: vi.fn().mockResolvedValue(undefined) },
+    mouse: {
+      move: vi.fn().mockResolvedValue(undefined),
+      wheel: vi.fn().mockResolvedValue(undefined),
+    },
   };
 }
 
@@ -288,10 +354,16 @@ function makeMockMemoryCache() {
   const store = new Map<string, unknown>();
   return {
     get: vi.fn((key: string) => store.get(key)),
-    set: vi.fn((key: string, value: unknown) => { store.set(key, value); }),
+    set: vi.fn((key: string, value: unknown) => {
+      store.set(key, value);
+    }),
     has: vi.fn((key: string) => store.has(key)),
-    delete: vi.fn((key: string) => { store.delete(key); }),
-    clear: vi.fn(() => { store.clear(); }),
+    delete: vi.fn((key: string) => {
+      store.delete(key);
+    }),
+    clear: vi.fn(() => {
+      store.clear();
+    }),
   };
 }
 
@@ -359,18 +431,17 @@ describe('IaaiClient.search', () => {
     expect(browser.getPage).not.toHaveBeenCalled();
   });
 
-  it('calls RateLimiter.acquire() before navigation', async () => {
+  it('calls RateLimiter.execute() before navigation', async () => {
     const page = makeMockPage();
     browser.getPage.mockResolvedValue(page);
 
     await client.search({ query: 'Honda Civic' }).catch(() => {});
-    expect(rateLimiter.acquire).toHaveBeenCalledOnce();
+    expect(rateLimiter.execute).toHaveBeenCalledOnce();
   });
 
   it('throws CaptchaError when CAPTCHA detected', async () => {
     const page = makeMockPage();
     page.url.mockReturnValue('https://www.iaai.com/captcha');
-    page.content.mockResolvedValue('<html>captcha challenge</html>');
     browser.getPage.mockResolvedValue(page);
 
     await expect(client.search({ query: 'test' })).rejects.toThrow(CaptchaError);
@@ -405,7 +476,6 @@ describe('IaaiClient.search', () => {
     browser.getPage.mockResolvedValue(page);
 
     await expect(client.search({ query: 'BMW' })).rejects.toThrow(RateLimitError);
-    expect(rateLimiter.applyBackoff).toHaveBeenCalled();
   });
 });
 
@@ -445,12 +515,12 @@ describe('IaaiClient.getListing', () => {
     expect(browser.getPage).not.toHaveBeenCalled();
   });
 
-  it('calls RateLimiter.acquire() before navigation', async () => {
+  it('calls RateLimiter.execute() before navigation', async () => {
     const page = makeMockPage();
     browser.getPage.mockResolvedValue(page);
 
     await client.getListing('A12345678').catch(() => {});
-    expect(rateLimiter.acquire).toHaveBeenCalledOnce();
+    expect(rateLimiter.execute).toHaveBeenCalledOnce();
   });
 
   it('throws ScraperError on 404', async () => {
@@ -576,7 +646,7 @@ describe('IaaiClient.watchListing', () => {
     };
     sqliteCache.watchlistList.mockReturnValue([mockEntry]);
 
-    const result = client.watchListing('list') as typeof mockEntry[];
+    const result = client.watchListing('list') as (typeof mockEntry)[];
     expect(result).toHaveLength(1);
     expect(result[0]?.source).toBe('iaai');
   });
