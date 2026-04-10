@@ -1,0 +1,180 @@
+name: Issue Intake Quality
+
+concurrency:
+  group: intake-triage-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  validate-intake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required issue fields
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            if (!issue || issue.pull_request) {
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = issue.number;
+            const body = issue.body || "";
+            const marker = "<!-- intake-quality-check -->";
+
+            const required = [
+              "Steps to reproduce",
+              "Expected behavior",
+              "Actual behavior",
+              "Logs / screenshots",
+              "Environment",
+              "Impact"
+            ];
+
+            function escapeRegExp(value) {
+              return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            }
+
+            function extractSection(markdown, header) {
+              const pattern = new RegExp(`(^|\\n)###\\s+${escapeRegExp(header)}\\s*\\n([\\s\\S]*?)(?=\\n###\\s+|$)`, "i");
+              const match = markdown.match(pattern);
+              if (!match) {
+                return "";
+              }
+              return (match[2] || "").trim();
+            }
+
+            function hasMeaningfulText(value) {
+              if (!value) {
+                return false;
+              }
+              const normalized = value
+                .replace(/<!--.*?-->/gs, "")
+                .replace(/\r/g, "")
+                .replace(/\n+/g, "\n")
+                .trim();
+
+              if (!normalized) {
+                return false;
+              }
+
+              const placeholderPatterns = [
+                /^n\/?a\.?$/i,
+                /^none$/i,
+                /^tbd$/i,
+                /^todo$/i,
+                /^-+$/
+              ];
+
+              return !placeholderPatterns.some((pattern) => pattern.test(normalized));
+            }
+
+            async function ensureLabel(name, color, description) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name });
+              } catch (error) {
+                if (error.status === 404) {
+                  try {
+                    await github.rest.issues.createLabel({ owner, repo, name, color, description });
+                  } catch (createError) {
+                    if (createError.status !== 422) {
+                      throw createError;
+                    }
+                  }
+                } else {
+                  throw error;
+                }
+              }
+            }
+
+            async function addLabel(name) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [name] });
+            }
+
+            async function removeLabel(name) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+              }
+            }
+
+            async function upsertBotComment(bodyText) {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number,
+                per_page: 100
+              });
+
+              const existing = comments.find((comment) =>
+                (comment.user?.type === "Bot" || comment.user?.login === "github-actions[bot]") &&
+                (comment.body || "").includes(marker)
+              );
+
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: existing.id,
+                  body: bodyText
+                });
+                return;
+              }
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body: bodyText
+              });
+            }
+
+            await ensureLabel("needs-info", "f9d0c4", "Issue is missing required intake information.");
+            await ensureLabel("status:ready-for-triage", "bfd4f2", "Issue intake is complete and ready for triage.");
+
+            const missing = required.filter((header) => {
+              const section = extractSection(body, header);
+              return !hasMeaningfulText(section);
+            });
+
+            if (missing.length > 0) {
+              const checklist = missing.map((field) => `- [ ] ${field}`).join("\n");
+              const commentBody = [
+                marker,
+                "## Intake Quality Check",
+                "",
+                "Thanks for opening this issue. We need a little more information before triage:",
+                "",
+                checklist,
+                "",
+                "Once all items are added, edit the issue and this checklist will auto-update."
+              ].join("\n");
+
+              await addLabel("needs-info");
+              await removeLabel("status:ready-for-triage");
+              await upsertBotComment(commentBody);
+              return;
+            }
+
+            const successBody = [
+              marker,
+              "## Intake Quality Check",
+              "",
+              "All required intake fields are present. This issue is ready for triage."
+            ].join("\n");
+
+            await removeLabel("needs-info");
+            await addLabel("status:ready-for-triage");
+            await upsertBotComment(successBody);

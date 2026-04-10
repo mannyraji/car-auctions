@@ -149,6 +149,24 @@ describe('normalizeIaai', () => {
     expect(listing.odometer).toBeNull();
   });
 
+  it('maps null finalBid, currentBid, buyNowPrice, saleDate to null output fields', () => {
+    const listing = normalizeIaai({
+      finalBid: null,
+      currentBid: null,
+      buyNowPrice: null,
+      saleDate: null,
+    } as IaaiRawListing);
+    expect(listing.final_bid).toBeNull();
+    expect(listing.current_bid).toBeNull();
+    expect(listing.buy_now_price).toBeNull();
+    expect(listing.sale_date).toBeNull();
+  });
+
+  it('maps null finalBid from full fixture to null final_bid', () => {
+    const listing = normalizeIaai(iaaiFixture);
+    expect(listing.final_bid).toBeNull();
+  });
+
   it('extracts image_urls from imageUrls object', () => {
     const listing = normalizeIaai(iaaiFixture);
     expect(listing.image_urls.length).toBeGreaterThan(0);
