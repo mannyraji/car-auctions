@@ -54,8 +54,12 @@ export class RateLimiter {
       return result;
     } catch (err) {
       if (err instanceof RateLimitError) {
+        const computedBackoffMs = this.currentBackoffMs
+          ? this.currentBackoffMs * this.backoffMultiplier
+          : 3000;
+        const retryAfterMs = err.retryAfterMs ?? 0;
         this.currentBackoffMs = Math.min(
-          this.currentBackoffMs ? this.currentBackoffMs * this.backoffMultiplier : 3000,
+          Math.max(computedBackoffMs, retryAfterMs),
           this.maxBackoffMs
         );
       }
