@@ -112,13 +112,26 @@ export async function withToolSpan(
 ): Promise<ContentResponse> {
   try {
     return await withSpan(`iaai.${toolName}`, { 'tool.name': toolName }, () => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<never>((_, reject) => {
-        const timer = setTimeout(() => {
+        timer = setTimeout(() => {
           reject(new ScraperError(`Tool ${toolName} timed out after 60 seconds`, 'TIMEOUT'));
         }, TOOL_TIMEOUT_MS);
-        timer.unref();
+
+        if (
+          typeof timer === 'object' &&
+          timer !== null &&
+          'unref' in timer &&
+          typeof timer.unref === 'function'
+        ) {
+          timer.unref();
+        }
       });
-      return Promise.race([handler(), timeoutPromise]);
+      return Promise.race([handler(), timeoutPromise]).finally(() => {
+        if (timer !== undefined) {
+          clearTimeout(timer);
+        }
+      });
     });
   } catch (err) {
     return createErrorResponse(err);
