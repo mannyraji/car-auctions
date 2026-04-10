@@ -111,7 +111,7 @@ export async function simulateMouseMovement(page: Page): Promise<void> {
 
 /**
  * Detects an IAAI CAPTCHA challenge by inspecting the Playwright page's title
- * and known CAPTCHA DOM selectors.
+ * URL, known CAPTCHA DOM selectors, and fallback content keywords.
  *
  * @returns `true` if a CAPTCHA challenge is detected, `false` otherwise.
  */
@@ -128,10 +128,37 @@ export async function isCaptchaPage(page: Page): Promise<boolean> {
     return true;
   }
 
-  // Check known CAPTCHA DOM selectors
-  for (const selector of CAPTCHA_SELECTORS) {
-    const el = await page.$(selector);
-    if (el !== null) {
+  // Check known CAPTCHA DOM selectors across differing page mocks/APIs.
+  if (typeof page.$ === 'function') {
+    for (const selector of CAPTCHA_SELECTORS) {
+      const el = await page.$(selector);
+      if (el !== null) {
+        return true;
+      }
+    }
+  } else if (typeof page.locator === 'function') {
+    const hasCaptchaSelector = await page
+      .locator(
+        '[class*="captcha"], [id*="captcha"], iframe[src*="recaptcha"], iframe[src*="hcaptcha"], .cf-challenge-running'
+      )
+      .count()
+      .then((count) => count > 0)
+      .catch(() => false);
+
+    if (hasCaptchaSelector) {
+      return true;
+    }
+  }
+
+  if (typeof page.content === 'function') {
+    const content = (await page.content().catch(() => '')).toLowerCase();
+    if (content.includes('recaptcha') || content.includes('hcaptcha')) {
+      return true;
+    }
+    if (content.includes('please verify') && content.includes('human')) {
+      return true;
+    }
+    if (content.includes('cloudflare') && content.includes('challenge')) {
       return true;
     }
   }
