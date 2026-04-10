@@ -46,13 +46,5 @@
     "https://vg.iaai.com/A12345678_5_lrg.jpg"
   ],
   "detailUrl": "https://www.iaai.com/VehicleDetail/A12345678",
-  "seller": "GEICO",
-  "grid_row": {
-    "conditionGradeDisplay": "3.5",
-    "lossType": "Collision",
-    "startCode": "START",
-    "bodyStyle": "Sedan",
-    "series": "XSE",
-    "runnable": true
-  }
+  "seller": "GEICO"
 }
