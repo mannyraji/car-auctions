@@ -63,7 +63,7 @@
       "branchName": "Dallas South",
       "branchZip": "75217",
       "latitude": 32.7767,
-      "longitude": -96.7970,
+      "longitude": -96.797,
       "imageUrls": [
         "https://vg.iaai.com/B87654321_1_lrg.jpg",
         "https://vg.iaai.com/B87654321_2_lrg.jpg"
@@ -97,8 +97,8 @@
       "finalBid": null,
       "branchName": "Atlanta West",
       "branchZip": "30301",
-      "latitude": 33.7490,
-      "longitude": -84.3880,
+      "latitude": 33.749,
+      "longitude": -84.388,
       "imageUrls": [
         "https://vg.iaai.com/C11223344_1_lrg.jpg",
         "https://vg.iaai.com/C11223344_2_lrg.jpg",

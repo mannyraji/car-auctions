@@ -9,6 +9,7 @@ export default tseslint.config(
       '**/coverage/**',
       '**/node_modules/**',
       '**/data/**',
+      '.github/copilot-shared/**',
       '**/*.min.js',
       '**/*.mjs',
     ],
