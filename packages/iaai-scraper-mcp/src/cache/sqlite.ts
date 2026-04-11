@@ -234,11 +234,11 @@ export class IaaiSqliteCache {
     // The column names never come from user input — they originate from the typed
     // Partial<WatchlistEntry> keys, and the allowlist rejects anything unexpected.
     const safeEntries = Object.entries(updates).filter(
-      ([k]) => k !== 'lot_number' && IaaiSqliteCache.WATCHLIST_COLUMNS.has(k)
+      ([k, v]) => k !== 'lot_number' && v !== undefined && IaaiSqliteCache.WATCHLIST_COLUMNS.has(k)
     );
     if (safeEntries.length === 0) return;
     const fields = safeEntries.map(([k]) => `${k} = ?`).join(', ');
-    const values = safeEntries.map(([, v]) => v);
+    const values = safeEntries.map(([, v]) => v ?? null);
     this.db
       .prepare(`UPDATE watchlist SET ${fields} WHERE lot_number = ?`)
       .run(...values, lotNumber);

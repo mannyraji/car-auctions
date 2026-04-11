@@ -197,17 +197,36 @@ describe('RateLimiter', () => {
   });
 
   it('enforces token-bucket minimum interval between requests', async () => {
-    vi.useRealTimers();
     // 2 req/s → minIntervalMs = 500ms
+    vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
     const limiter = makeLimiter({ requestsPerSecond: 2 });
     const times: number[] = [];
-    await limiter.execute(async () => {
+
+    const first = limiter.execute(async () => {
       times.push(Date.now());
     });
-    await limiter.execute(async () => {
-      times.push(Date.now());
-    });
-    // Second request should have been delayed by at least ~500ms
-    expect(times[1] - times[0]).toBeGreaterThanOrEqual(450);
+    await vi.runAllTimersAsync();
+    await first;
+
+    let secondCompleted = false;
+    const second = limiter
+      .execute(async () => {
+        times.push(Date.now());
+      })
+      .then(() => {
+        secondCompleted = true;
+      });
+
+    await Promise.resolve();
+    expect(secondCompleted).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(499);
+    expect(secondCompleted).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await second;
+
+    expect(times).toHaveLength(2);
+    expect(times[1] - times[0]).toBe(500);
   });
 });
