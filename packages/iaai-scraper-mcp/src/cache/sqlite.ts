@@ -46,6 +46,7 @@ export class IaaiSqliteCache {
     );
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('synchronous = NORMAL');
+    this.db.pragma('foreign_keys = ON');
     this.migrate();
   }
 
@@ -234,14 +235,20 @@ export class IaaiSqliteCache {
     // The column names never come from user input — they originate from the typed
     // Partial<WatchlistEntry> keys, and the allowlist rejects anything unexpected.
     const safeEntries = Object.entries(updates).filter(
-      ([k]) => k !== 'lot_number' && IaaiSqliteCache.WATCHLIST_COLUMNS.has(k)
+      ([k, v]) => k !== 'lot_number' && v !== undefined && IaaiSqliteCache.WATCHLIST_COLUMNS.has(k)
     );
     if (safeEntries.length === 0) return;
     const fields = safeEntries.map(([k]) => `${k} = ?`).join(', ');
-    const values = safeEntries.map(([, v]) => v);
+    const values = safeEntries.map(([, v]) => v ?? null);
     this.db
       .prepare(`UPDATE watchlist SET ${fields} WHERE lot_number = ?`)
       .run(...values, lotNumber);
+  }
+
+  watchlistGetHistory(lotNumber: string): WatchlistHistoryEntry[] {
+    return this.db
+      .prepare('SELECT * FROM watchlist_history WHERE lot_number = ? ORDER BY detected_at DESC')
+      .all(lotNumber) as WatchlistHistoryEntry[];
   }
 
   watchlistAddHistory(entry: Omit<WatchlistHistoryEntry, 'id'>): void {

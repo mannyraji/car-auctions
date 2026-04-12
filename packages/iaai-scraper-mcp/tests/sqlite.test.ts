@@ -224,8 +224,12 @@ describe('IaaiSqliteCache', () => {
       new_value: '500',
       detected_at: new Date().toISOString(),
     });
+    // Verify history exists before removal
+    expect(cache.watchlistGetHistory('LOT-I')).toHaveLength(1);
     cache.watchlistRemove('LOT-I');
-    // After cascade delete the parent is gone; this should not throw
+    // After cascade delete the parent is gone
     expect(cache.watchlistGet('LOT-I')).toBeNull();
+    // History rows should also be removed via ON DELETE CASCADE
+    expect(cache.watchlistGetHistory('LOT-I')).toHaveLength(0);
   });
 });

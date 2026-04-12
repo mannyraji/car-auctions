@@ -79,8 +79,15 @@ export async function randomDelay(
 /**
  * Performs random cursor moves and scroll simulation on the given Playwright page.
  * Mimics natural browsing behavior to avoid bot detection.
+ *
+ * @param page   Playwright page instance
+ * @param timer  Injectable timer function; defaults to real `setTimeout`.
+ *               Pass a fake timer in unit tests to avoid real delays.
  */
-export async function simulateMouseMovement(page: Page): Promise<void> {
+export async function simulateMouseMovement(
+  page: Page,
+  timer: (fn: () => void, ms: number) => void = setTimeout
+): Promise<void> {
   // Random mouse moves
   const moves =
     Math.floor(Math.random() * (MOUSE_MOVES_MAX - MOUSE_MOVES_MIN + 1)) + MOUSE_MOVES_MIN;
@@ -93,7 +100,7 @@ export async function simulateMouseMovement(page: Page): Promise<void> {
     const pause =
       Math.floor(Math.random() * (MOUSE_PAUSE_MAX_MS - MOUSE_PAUSE_MIN_MS + 1)) +
       MOUSE_PAUSE_MIN_MS;
-    await new Promise<void>((resolve) => setTimeout(resolve, pause));
+    await new Promise<void>((resolve) => timer(resolve, pause));
   }
 
   // Random scroll simulation
@@ -105,7 +112,7 @@ export async function simulateMouseMovement(page: Page): Promise<void> {
     const pause =
       Math.floor(Math.random() * (SCROLL_PAUSE_MAX_MS - SCROLL_PAUSE_MIN_MS + 1)) +
       SCROLL_PAUSE_MIN_MS;
-    await new Promise<void>((resolve) => setTimeout(resolve, pause));
+    await new Promise<void>((resolve) => timer(resolve, pause));
   }
 }
 
