@@ -46,6 +46,7 @@ export class IaaiSqliteCache {
     );
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('synchronous = NORMAL');
+    this.db.pragma('foreign_keys = ON');
     this.migrate();
   }
 
@@ -251,6 +252,12 @@ export class IaaiSqliteCache {
          VALUES (?, ?, ?, ?, ?)`
       )
       .run(entry.lot_number, entry.field, entry.old_value, entry.new_value, entry.detected_at);
+  }
+
+  watchlistGetHistory(lotNumber: string): WatchlistHistoryEntry[] {
+    return this.db
+      .prepare('SELECT * FROM watchlist_history WHERE lot_number = ? ORDER BY detected_at DESC')
+      .all(lotNumber) as WatchlistHistoryEntry[];
   }
 
   close(): void {
