@@ -80,57 +80,64 @@ async function main(): Promise<void> {
   // 1. Fail-fast env validation
   assertRequiredCredentials();
 
-  // 3. Instantiate all dependencies
-  const browser = new IaaiBrowser();
-  const cache = new IaaiSqliteCache();
-  const memoryCache = new MemoryCache();
-  const imageCache = new ImageCache();
-  const rateLimiter = new RateLimiter(config.rateLimit);
-  const client = new IaaiClient(browser, cache, memoryCache, imageCache, rateLimiter, config);
-
-  // 5. Resolve transport before startup so failures surface early
-  const transport = resolveTransport();
-
-  let startupComplete = false;
   let shuttingDown = false;
+  let browser: IaaiBrowser | undefined;
+  let cache: IaaiSqliteCache | undefined;
 
   try {
+    // 3. Instantiate all dependencies
+    browser = new IaaiBrowser();
+    cache = new IaaiSqliteCache();
+    const memoryCache = new MemoryCache();
+    const imageCache = new ImageCache();
+    const rateLimiter = new RateLimiter(config.rateLimit);
+    const client = new IaaiClient(browser, cache, memoryCache, imageCache, rateLimiter, config);
+
+    // 5. Select transport from TRANSPORT env var ("ws" is normalized to "websocket")
+    const transport = resolveTransport();
+
     // 4 & 6. Build the MCP server and start listening on the selected transport
     await createServer({ client, cache, imageCache }, transport);
-    startupComplete = true;
-  } finally {
-    if (!startupComplete) {
+
+    // Graceful shutdown — guard ensures cleanup runs at most once
+    const shutdown = async (): Promise<void> => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+
+      if (!browser || !cache) {
+        process.exitCode = 0;
+        return;
+      }
+
+      try {
+        await closeResources(browser, cache);
+        process.exitCode = 0;
+      } catch (err) {
+        console.error('Error during shutdown:', err);
+        process.exitCode = 1;
+      }
+    };
+
+    process.on('SIGINT', () => {
+      shutdown()
+        .catch(console.error)
+        .finally(() => process.exit(process.exitCode ?? 0));
+    });
+    process.on('SIGTERM', () => {
+      shutdown()
+        .catch(console.error)
+        .finally(() => process.exit(process.exitCode ?? 0));
+    });
+  } catch (err) {
+    if (browser && cache) {
       try {
         await closeResources(browser, cache);
       } catch (cleanupErr) {
         console.error('Error during startup cleanup:', cleanupErr);
       }
     }
+    throw err;
   }
-
-  // Graceful shutdown — guard ensures cleanup runs at most once
-  const shutdown = async (): Promise<void> => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    try {
-      await closeResources(browser, cache);
-      process.exitCode = 0;
-    } catch (err) {
-      console.error('Error during shutdown:', err);
-      process.exitCode = 1;
-    }
-  };
-
-  process.on('SIGINT', () => {
-    shutdown()
-      .catch(console.error)
-      .finally(() => process.exit(process.exitCode ?? 0));
-  });
-  process.on('SIGTERM', () => {
-    shutdown()
-      .catch(console.error)
-      .finally(() => process.exit(process.exitCode ?? 0));
-  });
 }
 
 main().catch((err: unknown) => {
