@@ -1,17 +1,75 @@
 /**
- * In-memory LRU cache for IAAI search results
- *
- * Max 200 entries, configurable TTL (default 15 min).
- * Full implementation: T010.
+ * In-memory LRU cache for search results
+ * Max 200 entries, 15-minute TTL
  */
+
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+  lastAccessed: number;
+}
+
 export class MemoryCache<T = unknown> {
-  get(_key: string): T | undefined {
-    return undefined;
+  private readonly store = new Map<string, CacheEntry<T>>();
+  private readonly maxEntries: number;
+  private readonly ttlMs: number;
+
+  constructor(maxEntries = 200, ttlMinutes = 15) {
+    this.maxEntries = maxEntries;
+    this.ttlMs = ttlMinutes * 60 * 1000;
   }
 
-  set(_key: string, _value: T): void {}
+  get(key: string): T | undefined {
+    const entry = this.store.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.store.delete(key);
+      return undefined;
+    }
+    entry.lastAccessed = Date.now();
+    return entry.value;
+  }
 
-  delete(_key: string): void {}
+  set(key: string, value: T): void {
+    this.evictExpired();
+    if (this.store.size >= this.maxEntries && !this.store.has(key)) {
+      this.evictLru();
+    }
+    this.store.set(key, {
+      value,
+      expiresAt: Date.now() + this.ttlMs,
+      lastAccessed: Date.now(),
+    });
+  }
 
-  clear(): void {}
+  delete(key: string): void {
+    this.store.delete(key);
+  }
+
+  clear(): void {
+    this.store.clear();
+  }
+
+  get size(): number {
+    return this.store.size;
+  }
+
+  private evictExpired(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.store) {
+      if (now > entry.expiresAt) this.store.delete(key);
+    }
+  }
+
+  private evictLru(): void {
+    let oldestKey: string | null = null;
+    let oldestAccess = Infinity;
+    for (const [key, entry] of this.store) {
+      if (entry.lastAccessed < oldestAccess) {
+        oldestAccess = entry.lastAccessed;
+        oldestKey = key;
+      }
+    }
+    if (oldestKey) this.store.delete(oldestKey);
+  }
 }

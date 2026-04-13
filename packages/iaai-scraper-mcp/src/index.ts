@@ -1,6 +1,7 @@
 /**
  * IAAI Scraper MCP — entry point
  */
+import type { AuctionListing } from '@car-auctions/shared';
 import { initTracing } from '@car-auctions/shared';
 import { IaaiBrowser } from './scraper/browser.js';
 import { IaaiClient } from './scraper/iaai-client.js';
@@ -29,10 +30,10 @@ async function main(): Promise<void> {
   // 3. Instantiate all dependencies
   const browser = new IaaiBrowser();
   const cache = new IaaiSqliteCache();
-  const memoryCache = new MemoryCache();
+  const memoryCache = new MemoryCache<AuctionListing[]>();
   const imageCache = new ImageCache();
   const rateLimiter = new RateLimiter(config.rateLimit);
-  const client = new IaaiClient(browser, cache, memoryCache, imageCache, rateLimiter, config);
+  const client = new IaaiClient(browser, cache, memoryCache, imageCache, rateLimiter);
 
   // 5. Resolve transport before startup so a bad TRANSPORT value surfaces early
   const transport = resolveTransport();

@@ -12,66 +12,7 @@ import type { IaaiClient } from './scraper/iaai-client.js';
 import type { IaaiSqliteCache } from './cache/sqlite.js';
 import type { ImageCache } from './cache/image-cache.js';
 
-// ─── Input schemas ────────────────────────────────────────────────────────────
-
-const lotNumberSchema = z.string().regex(/^[a-zA-Z0-9]+$/, 'Lot number must be alphanumeric');
-
-const vinSchema = z
-  .string()
-  .length(17)
-  .regex(/^[A-HJ-NPR-Z0-9]{17}$/i, 'VIN must be 17 alphanumeric chars, no I, O, or Q');
-
-export const searchSchema = z.object({
-  query: z.string().min(1).describe('Search query (make, model, year, etc.)'),
-  year_min: z.number().int().min(1900).max(2100).optional(),
-  year_max: z.number().int().min(1900).max(2100).optional(),
-  make: z.string().optional(),
-  model: z.string().optional(),
-  zip: z
-    .string()
-    .regex(/^\d{5}$/, 'Zip code must be 5 digits')
-    .optional(),
-  radius: z.number().positive().optional(),
-  limit: z.number().int().min(1).max(50).optional(),
-});
-
-export const listingSchema = z.object({
-  lot_number: lotNumberSchema.describe('IAAI stock number'),
-});
-
-export const imagesSchema = z.object({
-  stock_number: lotNumberSchema.describe('IAAI stock number'),
-});
-
-export const decodeVinSchema = z.object({
-  vin: vinSchema.describe('17-character VIN'),
-});
-
-export const watchListingSchema = z.discriminatedUnion('action', [
-  z.object({
-    action: z.literal('add').describe('Watchlist action'),
-    lot_number: lotNumberSchema,
-    bid_threshold: z.number().positive().optional(),
-    notes: z.string().max(500).optional(),
-  }),
-  z.object({
-    action: z.literal('remove').describe('Watchlist action'),
-    lot_number: lotNumberSchema,
-  }),
-  z.object({
-    action: z.literal('list').describe('Watchlist action'),
-  }),
-]);
-
-export const soldHistorySchema = z.object({
-  make: z.string().min(1).describe('Vehicle make'),
-  model: z.string().min(1).describe('Vehicle model'),
-  year_min: z.number().int().min(1900).max(2100).optional(),
-  year_max: z.number().int().min(1900).max(2100).optional(),
-  limit: z.number().int().min(1).max(100).optional(),
-});
-
-// ─── Server deps ──────────────────────────────────────────────────────────────
+// ─── Injectable dependencies ───────────────────────────────────────────────────
 
 export interface IaaiServerDeps {
   client: IaaiClient;
@@ -79,17 +20,144 @@ export interface IaaiServerDeps {
   imageCache: ImageCache;
 }
 
-// ─── Server factory ───────────────────────────────────────────────────────────
+// ─── Input schemas ─────────────────────────────────────────────────────────────
 
+export const searchSchema = {
+  query: z.string().max(200).describe('Free-text search term'),
+  make: z.string().optional().describe('Vehicle make (e.g., "Toyota")'),
+  model: z.string().optional().describe('Vehicle model (e.g., "Camry")'),
+  year_min: z
+    .number()
+    .int()
+    .min(1900)
+    .max(2100)
+    .optional()
+    .describe('Minimum model year (1900–2100)'),
+  year_max: z
+    .number()
+    .int()
+    .min(1900)
+    .max(2100)
+    .optional()
+    .describe('Maximum model year (1900–2100)'),
+  zip: z
+    .string()
+    .regex(/^\d{5}$/)
+    .optional()
+    .describe('5-digit ZIP code (leading zeros preserved)'),
+  radius: z.number().int().positive().optional().describe('Search radius in miles'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Maximum results to return (1–100, default 50)'),
+};
+
+export const listingSchema = {
+  stock_number: z
+    .string()
+    .regex(/^[A-Za-z0-9]+$/)
+    .describe('IAAI stock/lot number (alphanumeric only)'),
+};
+
+export const imagesSchema = {
+  stock_number: z
+    .string()
+    .regex(/^[A-Za-z0-9]+$/)
+    .describe('IAAI stock/lot number (alphanumeric only)'),
+  max_images: z
+    .number()
+    .int()
+    .min(1)
+    .max(50)
+    .optional()
+    .describe('Maximum number of images to return (1–50, default 20)'),
+  image_types: z
+    .array(z.enum(['exterior', 'interior', 'damage', 'engine', 'undercarriage']))
+    .optional()
+    .describe('Filter by image category'),
+};
+
+export const vinSchema = {
+  vin: z
+    .string()
+    .regex(/^[A-HJ-NPR-Z0-9]{17}$/i)
+    .describe('17-character VIN — characters I, O, and Q are not allowed'),
+};
+
+export const watchlistSchema = {
+  action: z.enum(['add', 'remove', 'list']).describe('Watchlist operation to perform'),
+  stock_number: z
+    .string()
+    .regex(/^[A-Za-z0-9]+$/)
+    .optional()
+    .describe('IAAI stock number (required for "add" and "remove"; alphanumeric only)'),
+  bid_threshold: z
+    .number()
+    .positive()
+    .optional()
+    .describe('Alert threshold in USD (positive, unbounded above)'),
+  notes: z.string().optional().describe('Optional notes for the watchlist entry'),
+};
+
+export const soldSchema = {
+  make: z.string().describe('Vehicle make (e.g., "Honda")'),
+  model: z.string().describe('Vehicle model (e.g., "Civic")'),
+  year_min: z
+    .number()
+    .int()
+    .min(1900)
+    .max(2100)
+    .optional()
+    .describe('Minimum model year (1900–2100)'),
+  year_max: z
+    .number()
+    .int()
+    .min(1900)
+    .max(2100)
+    .optional()
+    .describe('Maximum model year (1900–2100)'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Maximum results to return (1–100, default 50)'),
+};
+
+// ─── Stub handler ──────────────────────────────────────────────────────────────
+
+/** Shared stub — returned by every tool until real handlers replace it in Phases 3–8. */
+function notImplemented(): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
+  return Promise.resolve({
+    content: [
+      {
+        type: 'text' as const,
+        text: JSON.stringify({ success: false, error: 'not implemented' }),
+      },
+    ],
+  });
+}
+
+// ─── Server factory ────────────────────────────────────────────────────────────
+
+/**
+ * Instantiate the IAAI scraper MCP server and register all 6 tool slots.
+ *
+ * Tools are registered via the configure callback so all capabilities are
+ * advertised before server.connect(transport) is called (the handshake).
+ * Real handlers are wired in during Phases 3–8.
+ *
+ * @param deps - Injectable dependencies (client, caches) for testability.
+ * @param transport - Optional transport override (default: env TRANSPORT or stdio).
+ */
 export async function createServer(
   _deps: IaaiServerDeps,
   transport?: McpServerOptions['transport']
 ): Promise<void> {
-  // Tool stubs — replaced by real handlers in Phases 3–8 (T021, T024, T026, T028, T030, T033)
-  const notImplemented = (): { content: Array<{ type: 'text'; text: string }> } => ({
-    content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'not implemented' }) }],
-  });
-
   await createMcpServer(
     {
       name: 'iaai-scraper-mcp',
@@ -100,9 +168,9 @@ export async function createServer(
       server.tool('iaai_search', searchSchema, notImplemented);
       server.tool('iaai_get_listing', listingSchema, notImplemented);
       server.tool('iaai_get_images', imagesSchema, notImplemented);
-      server.tool('iaai_decode_vin', decodeVinSchema, notImplemented);
-      server.tool('iaai_watch_listing', watchListingSchema, notImplemented);
-      server.tool('iaai_sold_history', soldHistorySchema, notImplemented);
+      server.tool('iaai_decode_vin', vinSchema, notImplemented);
+      server.tool('iaai_sold_history', soldSchema, notImplemented);
+      server.tool('iaai_watch_listing', watchlistSchema, notImplemented);
     }
   );
 }

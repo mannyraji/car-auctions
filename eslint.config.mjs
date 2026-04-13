@@ -11,6 +11,7 @@ export default tseslint.config(
       '**/data/**',
       '.github/copilot-shared/**',
       '**/*.min.js',
+      '**/*.mjs',
     ],
   },
   eslint.configs.recommended,
