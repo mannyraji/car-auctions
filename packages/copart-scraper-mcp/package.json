@@ -19,11 +19,11 @@
   "dependencies": {
     "@car-auctions/shared": "*",
     "@modelcontextprotocol/sdk": "^1.18.0",
-    "better-sqlite3": "^12.2.0",
+    "better-sqlite3": "^12.9.0",
     "playwright": "^1.55.0",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "sharp": "^0.33.0",
+    "sharp": "^0.34.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {
