@@ -1,0 +1,103 @@
+name: Feature Request
+description: Propose a feature with enough context for prioritization and triage.
+title: 'feat: '
+labels:
+  - type:feature
+  - status:ready-for-triage
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: If this addresses a gap, how can we reproduce the current limitation?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should the improved behavior be?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What is the current behavior or limitation?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Add examples, screenshots, logs, or references if available.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include relevant runtime/platform constraints.
+      placeholder: Node 20.x, package area, deployment constraints
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Describe expected user/business impact and urgency.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed solution
+      description: Optional implementation sketch.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: component_area
+    attributes:
+      label: Component area
+      description: Which area is most impacted?
+      options:
+        - shared
+        - copart-scraper-mcp
+        - iaai-scraper-mcp
+        - docs
+        - infra
+        - unknown
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: Severity level for this issue.
+      options:
+        - critical
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: Priority level for planning.
+      options:
+        - P1
+        - P2
+        - P3
+    validations:
+      required: true

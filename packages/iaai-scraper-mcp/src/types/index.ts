@@ -139,7 +139,6 @@ export interface IaaiGetImagesOpts {
   maxImages?: number;
   imageTypes?: string[];
 }
-
 /** Persisted IAAI session state used for auth restoration. */
 export interface IaaiSession {
   cookies: Array<{
