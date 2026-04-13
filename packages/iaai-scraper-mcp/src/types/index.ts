@@ -134,6 +134,11 @@ export interface WatchlistAddParams {
   notes?: string;
 }
 
+/** Options for getImages */
+export interface IaaiGetImagesOpts {
+  maxImages?: number;
+  imageTypes?: string[];
+}
 /** Persisted IAAI session state used for auth restoration. */
 export interface IaaiSession {
   cookies: Array<{
@@ -160,4 +165,6 @@ export interface ScraperResult<T> {
   stale: boolean;
   /** ISO timestamp when data was cached; null if freshly scraped. */
   cachedAt: string | null;
+  /** Whether the result is partial (some images missing). Only used by getImages. */
+  partial?: boolean;
 }

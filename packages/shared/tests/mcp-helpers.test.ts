@@ -61,4 +61,20 @@ describe('createMcpServer', () => {
     expect(() => server.tool('my_tool', {}, async () => ({ content: [] }))).not.toThrow();
     expect(mockServerInstance.tool).toHaveBeenCalledWith('my_tool', {}, expect.any(Function));
   });
+
+  it('registers tools before connecting when a configure callback is provided', async () => {
+    const callOrder: string[] = [];
+    mockServerInstance.tool.mockImplementation(() => {
+      callOrder.push('tool');
+    });
+    mockServerInstance.connect.mockImplementation(async () => {
+      callOrder.push('connect');
+    });
+
+    await createMcpServer({ name: 'test', version: '0.1.0', transport: 'stdio' }, (server) => {
+      server.tool('my_tool', {}, async () => ({ content: [] }));
+    });
+
+    expect(callOrder).toEqual(['tool', 'connect']);
+  });
 });
