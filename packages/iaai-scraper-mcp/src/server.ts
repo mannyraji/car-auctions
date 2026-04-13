@@ -1,24 +1,23 @@
 /**
  * MCP server registration for IAAI scraper tools
+ *
+ * Registers 6 tool stubs with validated input schemas: iaai_search,
+ * iaai_get_listing, iaai_get_images, iaai_decode_vin, iaai_watch_listing,
+ * iaai_sold_history.  Full handler implementations: T021–T033.
  */
 import { z } from 'zod';
 import { createMcpServer } from '@car-auctions/shared';
+import type { McpServerOptions } from '@car-auctions/shared';
+import type { IaaiClient } from './scraper/iaai-client.js';
+import type { IaaiSqliteCache } from './cache/sqlite.js';
+import type { ImageCache } from './cache/image-cache.js';
 
 // ─── Injectable dependencies ───────────────────────────────────────────────────
 
-/**
- * Dependencies injected into createServer. Each field will be populated by a
- * concrete implementation as Phases 3–8 land; stubs ignore all deps.
- */
-export interface ServerDeps {
-  // Populated in Phase 3: scraper client
-  client?: unknown;
-  // Populated in Phase 4: SQLite cache
-  cache?: unknown;
-  // Populated in Phase 5: disk image cache
-  imageCache?: unknown;
-  // Populated in Phase 6: VIN decode cache (shared)
-  vinCache?: unknown;
+export interface IaaiServerDeps {
+  client: IaaiClient;
+  cache: IaaiSqliteCache;
+  imageCache: ImageCache;
 }
 
 // ─── Input schemas ─────────────────────────────────────────────────────────────
@@ -148,25 +147,30 @@ function notImplemented(): Promise<{ content: Array<{ type: 'text'; text: string
 /**
  * Instantiate the IAAI scraper MCP server and register all 6 tool slots.
  *
- * The MCP server is created via `createMcpServer` from `@car-auctions/shared`,
- * which uses the `createRequire(import.meta.url)` pattern internally to satisfy
- * the ESM interop requirement for `@modelcontextprotocol/sdk`.
- *
- * All tools are registered as stubs that return `{ success: false, error: "not
- * implemented" }`. Real handlers are wired in during Phases 3–8.
+ * Tools are registered via the configure callback so all capabilities are
+ * advertised before server.connect(transport) is called (the handshake).
+ * Real handlers are wired in during Phases 3–8.
  *
  * @param deps - Injectable dependencies (client, caches) for testability.
+ * @param transport - Optional transport override (default: env TRANSPORT or stdio).
  */
-export async function createServer(_deps: ServerDeps): Promise<void> {
-  const server = await createMcpServer({
-    name: 'iaai-scraper-mcp',
-    version: '0.1.0',
-  });
-
-  server.tool('iaai_search', searchSchema, notImplemented);
-  server.tool('iaai_get_listing', listingSchema, notImplemented);
-  server.tool('iaai_get_images', imagesSchema, notImplemented);
-  server.tool('iaai_decode_vin', vinSchema, notImplemented);
-  server.tool('iaai_sold_history', soldSchema, notImplemented);
-  server.tool('iaai_watch_listing', watchlistSchema, notImplemented);
+export async function createServer(
+  _deps: IaaiServerDeps,
+  transport?: McpServerOptions['transport']
+): Promise<void> {
+  await createMcpServer(
+    {
+      name: 'iaai-scraper-mcp',
+      version: '0.1.0',
+      transport,
+    },
+    (server) => {
+      server.tool('iaai_search', searchSchema, notImplemented);
+      server.tool('iaai_get_listing', listingSchema, notImplemented);
+      server.tool('iaai_get_images', imagesSchema, notImplemented);
+      server.tool('iaai_decode_vin', vinSchema, notImplemented);
+      server.tool('iaai_sold_history', soldSchema, notImplemented);
+      server.tool('iaai_watch_listing', watchlistSchema, notImplemented);
+    }
+  );
 }
