@@ -1,104 +1,131 @@
-# Implementation Plan: [FEATURE]
+# Implementation Plan: Carfax Scraper MCP Tools
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
-
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
+**Branch**: `003-carfax-scraper-mcp-tools` | **Date**: 2026-04-14 | **Spec**: [spec.md](spec.md)
+**Input**: Feature specification from `/specs/003-carfax-scraper-mcp-tools/spec.md`
 
 ## Summary
 
-[Extract from feature spec: primary requirement + technical approach from research]
+Build `@car-auctions/carfax-scraper-mcp` with two MCP tools: `carfax_get_report` (full history by VIN) and `carfax_get_summary` (risk-focused summary by VIN). Follow existing scraper package architecture (browser → client → interceptor → parser), monorepo conventions, typed error contracts, stale fallback semantics, and constitution quality gates. Use SQLite WAL for 30-day Carfax cache and fixture-driven Vitest suites.
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
-
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: TypeScript 5+ on Node.js 20+ (ES2022 target, Node16 module resolution, strict mode)  
+**Primary Dependencies**: `@car-auctions/shared`, `@modelcontextprotocol/sdk`, `playwright`, `playwright-extra`, `puppeteer-extra-plugin-stealth`, `better-sqlite3`, `zod`  
+**Storage**: SQLite WAL (`data/carfax.sqlite`) for Carfax reports (30-day TTL), optional disk session state in `data/`  
+**Testing**: Vitest fixture-driven parser/tool tests, with constitution coverage targets for tools/parser  
+**Target Platform**: Node.js 20+ MCP server runtime (Linux production, local dev environments)  
+**Project Type**: MCP server npm workspace package  
+**Performance Goals**: Cached Carfax read <100ms; summary derivation from cached report <20ms; end-to-end report retrieval within 60s handler timeout  
+**Constraints**: Input validation at tool boundary; typed errors only; 30s page navigation timeout; stale fallback contract with `cachedAt`; no CAPTCHA solving  
+**Scale/Scope**: 2 MCP tools, 1 new package, parser+tool test suites, SQLite cache tables for report/summary fetches
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+*Pre-Phase-0 Check*
+
+| Gate | Status | Evidence |
+|------|--------|----------|
+| **Gate 1 — Safety** | ✅ PASS | CAPTCHA detection and no-solve policy required by design; no NMVTIS coupling |
+| **Gate 2 — Validation** | ✅ PASS | Both tools require VIN boundary validation (17 chars, no I/O/Q) |
+| **Gate 3 — Cache** | ✅ PASS | SQLite WAL cache with 30-day Carfax TTL and stale fallback including `cachedAt` |
+| **Gate 4 — Tests** | ✅ PASS | Fixture-driven `tests/parser.test.ts` and `tests/tools.test.ts` planned |
+| **Gate 5 — Rate Limits** | ✅ PASS | Carfax scraper follows 1 req/3s, backoff on 403/429, daily cap behavior |
+| **Gate 6 — Types** | ✅ PASS | Shared types/errors from `@car-auctions/shared`; no bare `Error` from handlers |
+| **Gate 7 — Build** | ✅ PASS | Typecheck/lint/build/test checks remain mandatory before merge |
+| **Gate 8 — Observability** | ✅ PASS | OTEL span attributes required for all tool calls |
+| **Gate 9 — Stability** | ✅ PASS | New package follows canonical structure; no unsolicited refactors |
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+specs/003-carfax-scraper-mcp-tools/
+├── plan.md
+├── spec.md
+├── research.md
+├── data-model.md
+├── quickstart.md
+├── contracts/
+│   └── public-api.md
+└── tasks.md             # Phase 2 output (/speckit.tasks command - not created in this run)
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
-
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
-
-tests/
-├── contract/
-├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
+packages/carfax-scraper-mcp/
+├── package.json
+├── tsconfig.json
+├── vitest.config.ts
+├── config/
+│   └── default.json
 ├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+│   ├── index.ts
+│   ├── server.ts
+│   ├── tools/
+│   │   ├── report.ts
+│   │   └── summary.ts
+│   ├── scraper/
+│   │   ├── browser.ts
+│   │   ├── carfax-client.ts
+│   │   ├── interceptor.ts
+│   │   └── parser.ts
+│   ├── cache/
+│   │   ├── sqlite.ts
+│   │   └── memory.ts
+│   ├── utils/
+│   │   ├── config.ts
+│   │   ├── rate-limiter.ts
+│   │   └── tool-response.ts
+│   └── types/
+│       └── index.ts
+├── tests/
+│   ├── parser.test.ts
+│   ├── tools.test.ts
+│   └── fixtures/
+└── data/
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: Add a new scraper MCP package under `packages/carfax-scraper-mcp` using the same canonical package layout used by existing scraper servers.
+
+## Phase 0 Artifacts
+
+Research is complete in [research.md](research.md), including decisions for:
+
+- Carfax fetch and parsing strategy
+- Carfax auth/session handling
+- Report/summary derivation model
+- Cache and stale fallback behavior
+- Validation and error mapping contract
+
+## Phase 1 Artifacts
+
+Design is complete in:
+
+- [data-model.md](data-model.md)
+- [contracts/public-api.md](contracts/public-api.md)
+- [quickstart.md](quickstart.md)
+
+### Post-Design Constitution Re-Check
+
+| Gate | Status | Evidence |
+|------|--------|----------|
+| **Gate 1 — Safety** | ✅ PASS | CAPTCHA is terminal (`CaptchaError`); no solve paths; no NMVTIS use in Carfax tools |
+| **Gate 2 — Validation** | ✅ PASS | VIN validation contract captured in API contract and data model |
+| **Gate 3 — Cache** | ✅ PASS | 30-day Carfax TTL + stale response metadata defined in model/contract |
+| **Gate 4 — Tests** | ✅ PASS | Parser/tool fixture suites specified in quickstart and project structure |
+| **Gate 5 — Rate Limits** | ✅ PASS | Rate-limit/backoff requirements captured in research and contracts |
+| **Gate 6 — Types** | ✅ PASS | Shared typed errors and shared type imports mandated in contract |
+| **Gate 7 — Build** | ✅ PASS | Root typecheck/build/lint/test validation kept as merge requirement |
+| **Gate 8 — Observability** | ✅ PASS | Tool span contract documented in API contract |
+| **Gate 9 — Stability** | ✅ PASS | Scope limited to new Carfax package artifacts only |
 
 ## Complexity Tracking
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
+> No constitution violations identified.
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+| N/A | N/A | N/A |
