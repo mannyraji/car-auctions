@@ -5,6 +5,12 @@
 **Status**: Draft  
 **Input**: User description: "Carfax Scraper MCP tools"
 
+## Clarifications
+
+### Session 2026-04-14
+
+- Q: How should Carfax session/auth artifacts be persisted at rest? → A: Option B — encrypt persisted session/auth artifacts at rest with a managed key.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Fetch full Carfax history by VIN (Priority: P1)
@@ -75,13 +81,14 @@ As a maintainer, I need Carfax tool behavior to follow anti-bot, validation, cac
 - **FR-009**: Tool handlers MUST return structured typed errors only (`ScraperError`, `CaptchaError`, `RateLimitError`, `CacheError`).
 - **FR-010**: Each tool invocation MUST emit OTEL span attributes `tool.name`, `tool.status`, and `tool.duration_ms`.
 - **FR-011**: Parser and tool tests MUST use fixture-driven Vitest suites with coverage targets aligned to constitution quality gates.
+- **FR-012**: Persisted Carfax session/auth artifacts MUST be encrypted at rest using a managed encryption key.
 
 ### Key Entities *(include if feature involves data)*
 
 - **CarfaxReport**: Full normalized history payload for a VIN (ownership, accidents, title, service, odometer, recalls, risk flags).
 - **CarfaxSummary**: Condensed risk-focused projection of `CarfaxReport` used for fast triage.
 - **CarfaxCacheRecord**: Cached report JSON with `fetched_at`, `expires_at`, and stale metadata.
-- **CarfaxSessionState**: Persisted authenticated browser/session context used for scraper reuse across runs.
+- **CarfaxSessionState**: Persisted authenticated browser/session context used for scraper reuse across runs, encrypted at rest with a managed key.
 
 ## Success Criteria *(mandatory)*
 
@@ -91,6 +98,7 @@ As a maintainer, I need Carfax tool behavior to follow anti-bot, validation, cac
 - **SC-002**: Invalid VIN requests are rejected at boundary validation with no downstream network call.
 - **SC-003**: Cache hits return in under 100ms for warm entries in local testing.
 - **SC-004**: On simulated upstream failure with cached data present, tools return stale payloads with `stale: true` and non-null `cachedAt`.
+- **SC-005**: Persisted Carfax session/auth artifacts are encrypted at rest with managed-key protection in implementation and tests.
 
 ## Assumptions
 
