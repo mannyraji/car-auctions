@@ -128,7 +128,7 @@ All statements use prepared queries only.
 Request
   │
   ├── Validate VIN (boundary)
-  │     └── invalid -> ScraperError
+  │     └── invalid -> VALIDATION_ERROR  (code: "VALIDATION_ERROR", retryable: false)
   │
   ├── Cache fresh hit -> success (stale: false)
   │
