@@ -119,7 +119,7 @@
 - [ ] T032 [P] Add package usage and operational documentation in `packages/carfax-scraper-mcp/README.md`
 - [ ] T033 [P] Align quickstart verification steps with implemented commands in `specs/003-carfax-scraper-mcp-tools/quickstart.md`
 - [ ] T034 Run package-level checks from `packages/carfax-scraper-mcp/` (`npm run typecheck`, `npm run build`, `npx vitest run`)
-- [ ] T035 Run repo-wide validation from `/home/runner/work/car-auctions/car-auctions` (`npm run typecheck`, `npm run build`, `npm run test`, `npm run lint`, `npm run format:check`)
+- [ ] T035 Run repo-wide validation from the repo root (`npm run typecheck`, `npm run build`, `npm run test`, `npm run lint`, `npm run format:check`)
 
 ---
 
