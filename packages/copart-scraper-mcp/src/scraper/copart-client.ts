@@ -15,6 +15,7 @@ import {
   toAuctionListing,
 } from './parser.js';
 import { randomDelay, simulateMouseMovement, isCaptchaPage } from '@car-auctions/shared';
+import type { Response } from 'playwright';
 import type {
   CopartSearchParams,
   CopartSoldParams,
@@ -64,7 +65,8 @@ export class CopartClient {
 
       if (!response) throw new ScraperError('No response from Copart search page');
       if (response.status() === 429 || response.status() === 403) {
-        throw new RateLimitError(`HTTP ${response.status()} from Copart`, 60000);
+        const retryAfterMs = await this.getRetryAfterMs(response);
+        throw new RateLimitError(`HTTP ${response.status()} from Copart`, retryAfterMs);
       }
 
       if (await isCaptchaPage(p)) {
@@ -127,7 +129,8 @@ export class CopartClient {
       if (response.status() === 404)
         throw new ScraperError(`Lot ${lotNumber} not found`, 'SCRAPER_ERROR', false);
       if (response.status() === 429 || response.status() === 403) {
-        throw new RateLimitError(`HTTP ${response.status()} from Copart`, 60000);
+        const retryAfterMs = await this.getRetryAfterMs(response);
+        throw new RateLimitError(`HTTP ${response.status()} from Copart`, retryAfterMs);
       }
 
       if (await isCaptchaPage(p)) {
@@ -288,6 +291,25 @@ export class CopartClient {
     } finally {
       if (page) await page.close().catch(() => {});
     }
+  }
+
+  private async getRetryAfterMs(response: Response): Promise<number> {
+    const fallbackMs = 60000;
+    const retryAfterHeader = (await response.headerValue('retry-after').catch(() => null))?.trim();
+    if (!retryAfterHeader) return fallbackMs;
+
+    const retryAfterSeconds = Number(retryAfterHeader);
+    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
+      return Math.round(retryAfterSeconds * 1000);
+    }
+
+    const retryAfterDateMs = Date.parse(retryAfterHeader);
+    if (!Number.isNaN(retryAfterDateMs)) {
+      const deltaMs = retryAfterDateMs - Date.now();
+      return deltaMs > 0 ? deltaMs : 0;
+    }
+
+    return fallbackMs;
   }
 
   private async extractPageJson(page: import('playwright').Page): Promise<unknown> {
