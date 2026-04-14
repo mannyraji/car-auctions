@@ -2,14 +2,16 @@
  * IAAI Scraper MCP — entry point
  */
 import type { AuctionListing } from '@car-auctions/shared';
-import { initTracing } from '@car-auctions/shared';
+import { initTracing, MemoryCache, ImageCache, RateLimiter } from '@car-auctions/shared';
 import { IaaiBrowser } from './scraper/browser.js';
 import { IaaiClient } from './scraper/iaai-client.js';
 import { IaaiSqliteCache } from './cache/sqlite.js';
-import { MemoryCache } from './cache/memory.js';
-import { ImageCache } from './cache/image-cache.js';
-import { RateLimiter } from './utils/rate-limiter.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { config } from './utils/config.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const IMAGE_CACHE_DIR = path.resolve(__dirname, '..', 'data', 'images');
 import { createServer } from './server.js';
 import {
   resolveTransport,
@@ -25,15 +27,16 @@ initTracing({ serviceName: 'iaai-scraper-mcp' });
 
 async function main(): Promise<void> {
   // 1. Fail-fast env validation
-  assertRequiredCredentials();
+  const { email, password } = assertRequiredCredentials();
 
   // 3. Instantiate all dependencies
-  const browser = new IaaiBrowser();
+  const browser = new IaaiBrowser({ email, password });
   const cache = new IaaiSqliteCache();
   const memoryCache = new MemoryCache<AuctionListing[]>();
-  const imageCache = new ImageCache();
+  const imageCache = new ImageCache(IMAGE_CACHE_DIR, '.webp');
   const rateLimiter = new RateLimiter(config.rateLimit);
-  const client = new IaaiClient(browser, cache, memoryCache, imageCache, rateLimiter);
+  const credentials = { email, password };
+  const client = new IaaiClient(browser, cache, memoryCache, imageCache, rateLimiter, credentials);
 
   // 5. Resolve transport before startup so a bad TRANSPORT value surfaces early
   const transport = resolveTransport();

@@ -1,19 +1,22 @@
 /**
  * Copart Scraper MCP — entry point
  */
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { CopartBrowser } from './scraper/browser.js';
 import { CopartClient } from './scraper/copart-client.js';
 import { CopartSqliteCache } from './cache/sqlite.js';
-import { ImageCache } from './cache/image-cache.js';
-import { RateLimiter } from './utils/rate-limiter.js';
 import { config } from './utils/config.js';
-import { SqliteVinCache } from '@car-auctions/shared';
+import { SqliteVinCache, ImageCache, RateLimiter } from '@car-auctions/shared';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const IMAGE_CACHE_DIR = path.resolve(__dirname, '..', 'data', 'images');
 import { createCopartServer } from './server.js';
 
 async function main(): Promise<void> {
   const browser = new CopartBrowser();
   const cache = new CopartSqliteCache();
-  const imageCache = new ImageCache();
+  const imageCache = new ImageCache(IMAGE_CACHE_DIR, '.jpg');
   const vinCache = new SqliteVinCache();
   const rateLimiter = new RateLimiter(config.rateLimit);
   const client = new CopartClient(browser, cache, rateLimiter);

@@ -3,7 +3,7 @@
  * Navigates Copart pages and extracts data via network interception
  */
 import { ScraperError, CaptchaError, RateLimitError } from '@car-auctions/shared';
-import type { AuctionListing } from '@car-auctions/shared';
+import type { AuctionListing, RateLimiter } from '@car-auctions/shared';
 import type { CopartBrowser } from './browser.js';
 import { CopartInterceptor } from './interceptor.js';
 import {
@@ -14,7 +14,8 @@ import {
   toAuctionListings,
   toAuctionListing,
 } from './parser.js';
-import { randomDelay, simulateMouseMovement, isCaptchaPage } from '../utils/stealth.js';
+import { randomDelay, simulateMouseMovement, isCaptchaPage } from '@car-auctions/shared';
+import type { Response } from 'playwright';
 import type {
   CopartSearchParams,
   CopartSoldParams,
@@ -22,7 +23,6 @@ import type {
   ScraperResult,
 } from '../types/index.js';
 import type { CopartSqliteCache } from '../cache/sqlite.js';
-import type { RateLimiter } from '../utils/rate-limiter.js';
 
 const BASE_URL = 'https://www.copart.com';
 
@@ -65,12 +65,11 @@ export class CopartClient {
 
       if (!response) throw new ScraperError('No response from Copart search page');
       if (response.status() === 429 || response.status() === 403) {
-        throw new RateLimitError(`HTTP ${response.status()} from Copart`, 60000);
+        const retryAfterMs = await this.getRetryAfterMs(response);
+        throw new RateLimitError(`HTTP ${response.status()} from Copart`, retryAfterMs);
       }
 
-      const pageUrl = p.url();
-      const content = await p.content();
-      if (isCaptchaPage(pageUrl, content)) {
+      if (await isCaptchaPage(p)) {
         throw new CaptchaError('Copart CAPTCHA detected on search page');
       }
 
@@ -130,12 +129,11 @@ export class CopartClient {
       if (response.status() === 404)
         throw new ScraperError(`Lot ${lotNumber} not found`, 'SCRAPER_ERROR', false);
       if (response.status() === 429 || response.status() === 403) {
-        throw new RateLimitError(`HTTP ${response.status()} from Copart`, 60000);
+        const retryAfterMs = await this.getRetryAfterMs(response);
+        throw new RateLimitError(`HTTP ${response.status()} from Copart`, retryAfterMs);
       }
 
-      const pageUrl = p.url();
-      const content = await p.content();
-      if (isCaptchaPage(pageUrl, content)) {
+      if (await isCaptchaPage(p)) {
         throw new CaptchaError('Copart CAPTCHA detected on listing page');
       }
 
@@ -194,9 +192,7 @@ export class CopartClient {
         ? this.rateLimiter.execute(() => p.goto(url, { waitUntil: 'networkidle', timeout: 30000 }))
         : p.goto(url, { waitUntil: 'networkidle', timeout: 30000 }));
 
-      const pageUrl = p.url();
-      const content = await p.content();
-      if (isCaptchaPage(pageUrl, content)) {
+      if (await isCaptchaPage(p)) {
         throw new CaptchaError('Copart CAPTCHA detected');
       }
 
@@ -260,9 +256,7 @@ export class CopartClient {
           )
         : p.goto(url.toString(), { waitUntil: 'networkidle', timeout: 30000 }));
 
-      const pageUrl = p.url();
-      const content = await p.content();
-      if (isCaptchaPage(pageUrl, content)) {
+      if (await isCaptchaPage(p)) {
         throw new CaptchaError('Copart CAPTCHA detected on sold history page');
       }
 
@@ -297,6 +291,25 @@ export class CopartClient {
     } finally {
       if (page) await page.close().catch(() => {});
     }
+  }
+
+  private async getRetryAfterMs(response: Response): Promise<number> {
+    const fallbackMs = 60000;
+    const retryAfterHeader = (await response.headerValue('retry-after').catch(() => null))?.trim();
+    if (!retryAfterHeader) return fallbackMs;
+
+    const retryAfterSeconds = Number(retryAfterHeader);
+    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
+      return Math.round(retryAfterSeconds * 1000);
+    }
+
+    const retryAfterDateMs = Date.parse(retryAfterHeader);
+    if (!Number.isNaN(retryAfterDateMs)) {
+      const deltaMs = retryAfterDateMs - Date.now();
+      return deltaMs > 0 ? deltaMs : 0;
+    }
+
+    return fallbackMs;
   }
 
   private async extractPageJson(page: import('playwright').Page): Promise<unknown> {

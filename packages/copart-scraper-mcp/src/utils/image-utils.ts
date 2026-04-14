@@ -1,7 +1,7 @@
 /**
  * Image utilities: fetch, resize, compress → base64
  */
-import type { ImageCache } from '../cache/image-cache.js';
+import type { ImageCache } from '@car-auctions/shared';
 
 const MAX_DIMENSION = 800;
 const JPEG_QUALITY = 80;

@@ -14,7 +14,7 @@ import {
   extractImageUrls,
   parseDomSearch,
 } from './parser.js';
-import { randomDelay, simulateMouseMovement, isCaptchaPage } from '../utils/stealth.js';
+import { randomDelay, simulateMouseMovement, isCaptchaPage } from '@car-auctions/shared';
 import { resizeAndCompress } from '../utils/image-utils.js';
 import type {
   IaaiSearchParams,
@@ -28,10 +28,9 @@ import type {
   ScraperResult,
   IaaiGetImagesOpts,
 } from '../types/index.js';
+import type { MemoryCache, ImageCache, RateLimiter } from '@car-auctions/shared';
+import type { IaaiBrowserCredentials } from './browser.js';
 import type { IaaiSqliteCache } from '../cache/sqlite.js';
-import type { MemoryCache } from '../cache/memory.js';
-import type { ImageCache } from '../cache/image-cache.js';
-import type { RateLimiter } from '../utils/rate-limiter.js';
 
 const BASE_URL = 'https://www.iaai.com';
 const NAV_TIMEOUT = 30000;
@@ -60,7 +59,8 @@ export class IaaiClient {
     private readonly cache: IaaiSqliteCache,
     private readonly memoryCache: MemoryCache<AuctionListing[]>,
     private readonly imageCache: ImageCache,
-    private readonly rateLimiter?: RateLimiter
+    private readonly rateLimiter?: RateLimiter,
+    private readonly credentials?: IaaiBrowserCredentials
   ) {}
 
   // ─── search ───────────────────────────────────────────────────────────────
@@ -294,11 +294,9 @@ export class IaaiClient {
 
     // Re-authenticate once on session expiry, then retry
     if (fetchResult.sessionExpired) {
-      const email = process.env['IAAI_EMAIL'];
-      const password = process.env['IAAI_PASSWORD'];
-      if (email && password) {
+      if (this.credentials) {
         try {
-          await this.browser.authenticate(email, password);
+          await this.browser.authenticate(this.credentials.email, this.credentials.password);
           // Retry navigation after successful re-auth
           try {
             fetchResult = await fetchUrls();
