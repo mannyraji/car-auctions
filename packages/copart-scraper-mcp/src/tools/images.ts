@@ -4,8 +4,8 @@
 import { z } from 'zod';
 import type { CopartClient } from '../scraper/copart-client.js';
 import { fetchImageAsBase64 } from '../utils/image-utils.js';
-import type { ImageCache } from '../cache/image-cache.js';
 import { ScraperError, CaptchaError, RateLimitError } from '@car-auctions/shared';
+import type { ImageCache } from '@car-auctions/shared';
 import {
   buildToolResponse,
   toToolError,

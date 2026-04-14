@@ -72,5 +72,18 @@ export type { BrowserPoolOptions } from './types/index.js';
 export { PriorityQueue } from './priority-queue/index.js';
 export type { PriorityLevel, PriorityRequest, PriorityQueueOptions } from './types/index.js';
 
+// ─── Cache Utilities ─────────────────────────────────────────────────────────
+export { MemoryCache } from './cache/index.js';
+export { ImageCache } from './cache/index.js';
+
+// ─── Rate Limiter ────────────────────────────────────────────────────────────
+export { RateLimiter, type RateLimiterConfig } from './rate-limiter/index.js';
+
+// ─── Config Loader ───────────────────────────────────────────────────────────
+export { loadConfigFile, validateConfig, parseRawConfig } from './config/index.js';
+
+// ─── Stealth Utilities ───────────────────────────────────────────────────────
+export { randomDelay, simulateMouseMovement, isCaptchaPage } from './stealth/index.js';
+
 // ─── OpenTelemetry Tracing ────────────────────────────────────────────────────
 export { initTracing, withSpan, type SpanAttributes } from './tracing/index.js';

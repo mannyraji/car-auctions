@@ -3,7 +3,7 @@
  * Navigates Copart pages and extracts data via network interception
  */
 import { ScraperError, CaptchaError, RateLimitError } from '@car-auctions/shared';
-import type { AuctionListing } from '@car-auctions/shared';
+import type { AuctionListing, RateLimiter } from '@car-auctions/shared';
 import type { CopartBrowser } from './browser.js';
 import { CopartInterceptor } from './interceptor.js';
 import {
@@ -14,7 +14,7 @@ import {
   toAuctionListings,
   toAuctionListing,
 } from './parser.js';
-import { randomDelay, simulateMouseMovement, isCaptchaPage } from '../utils/stealth.js';
+import { randomDelay, simulateMouseMovement, isCaptchaPage } from '@car-auctions/shared';
 import type {
   CopartSearchParams,
   CopartSoldParams,
@@ -22,7 +22,6 @@ import type {
   ScraperResult,
 } from '../types/index.js';
 import type { CopartSqliteCache } from '../cache/sqlite.js';
-import type { RateLimiter } from '../utils/rate-limiter.js';
 
 const BASE_URL = 'https://www.copart.com';
 
@@ -68,9 +67,7 @@ export class CopartClient {
         throw new RateLimitError(`HTTP ${response.status()} from Copart`, 60000);
       }
 
-      const pageUrl = p.url();
-      const content = await p.content();
-      if (isCaptchaPage(pageUrl, content)) {
+      if (await isCaptchaPage(p)) {
         throw new CaptchaError('Copart CAPTCHA detected on search page');
       }
 
@@ -133,9 +130,7 @@ export class CopartClient {
         throw new RateLimitError(`HTTP ${response.status()} from Copart`, 60000);
       }
 
-      const pageUrl = p.url();
-      const content = await p.content();
-      if (isCaptchaPage(pageUrl, content)) {
+      if (await isCaptchaPage(p)) {
         throw new CaptchaError('Copart CAPTCHA detected on listing page');
       }
 
@@ -194,9 +189,7 @@ export class CopartClient {
         ? this.rateLimiter.execute(() => p.goto(url, { waitUntil: 'networkidle', timeout: 30000 }))
         : p.goto(url, { waitUntil: 'networkidle', timeout: 30000 }));
 
-      const pageUrl = p.url();
-      const content = await p.content();
-      if (isCaptchaPage(pageUrl, content)) {
+      if (await isCaptchaPage(p)) {
         throw new CaptchaError('Copart CAPTCHA detected');
       }
 
@@ -260,9 +253,7 @@ export class CopartClient {
           )
         : p.goto(url.toString(), { waitUntil: 'networkidle', timeout: 30000 }));
 
-      const pageUrl = p.url();
-      const content = await p.content();
-      if (isCaptchaPage(pageUrl, content)) {
+      if (await isCaptchaPage(p)) {
         throw new CaptchaError('Copart CAPTCHA detected on sold history page');
       }
 

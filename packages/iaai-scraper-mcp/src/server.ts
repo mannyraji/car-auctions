@@ -10,7 +10,7 @@ import { createMcpServer } from '@car-auctions/shared';
 import type { McpServerOptions } from '@car-auctions/shared';
 import type { IaaiClient } from './scraper/iaai-client.js';
 import type { IaaiSqliteCache } from './cache/sqlite.js';
-import type { ImageCache } from './cache/image-cache.js';
+import type { ImageCache } from '@car-auctions/shared';
 
 // ─── Injectable dependencies ───────────────────────────────────────────────────
 

@@ -6,10 +6,14 @@
  * validation errors are logged (field path + message only — no stack
  * traces or file-system paths) and the built-in defaults are used instead.
  */
-import { readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { z } from 'zod';
+import {
+  loadConfigFile,
+  validateConfig as genericValidateConfig,
+  parseRawConfig as genericParseRawConfig,
+} from '@car-auctions/shared';
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -72,66 +76,19 @@ const DEFAULT_CONFIG: IaaiConfig = {
   },
 };
 
+// ─── Bound helpers (exported for testing) ─────────────────────────────────────
+
+export function validateConfig(parsed: unknown): IaaiConfig {
+  return genericValidateConfig(parsed, IaaiConfigSchema, DEFAULT_CONFIG);
+}
+
+export function parseRawConfig(raw: string): IaaiConfig {
+  return genericParseRawConfig(raw, IaaiConfigSchema, DEFAULT_CONFIG);
+}
+
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
-/**
- * Validate a parsed (unknown) value against the IaaiConfig schema.
- *
- * Returns `DEFAULT_CONFIG` (with a warning) when validation fails.
- * Exported for testing.
- */
-export function validateConfig(parsed: unknown): IaaiConfig {
-  // Empty object means "no overrides" — use defaults without a warning
-  if (
-    parsed !== null &&
-    typeof parsed === 'object' &&
-    !Array.isArray(parsed) &&
-    Object.keys(parsed).length === 0
-  ) {
-    return DEFAULT_CONFIG;
-  }
+const here = fileURLToPath(import.meta.url);
+const configPath = path.resolve(path.dirname(here), '..', '..', 'config', 'default.json');
 
-  const result = IaaiConfigSchema.safeParse(parsed);
-  if (!result.success) {
-    const issues = result.error.issues
-      .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
-      .join('; ');
-    console.warn(`[config] default.json validation failed (using defaults) — ${issues}`);
-    return DEFAULT_CONFIG;
-  }
-
-  return result.data;
-}
-
-/**
- * Parse a raw JSON string and validate it as IaaiConfig.
- *
- * Returns `DEFAULT_CONFIG` (with a warning) when the string is not valid JSON.
- * Exported for testing.
- */
-export function parseRawConfig(raw: string): IaaiConfig {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    console.warn('[config] default.json is not valid JSON — using defaults');
-    return DEFAULT_CONFIG;
-  }
-  return validateConfig(parsed);
-}
-
-export function loadConfigFile(): IaaiConfig {
-  let raw: string;
-  try {
-    const here = fileURLToPath(import.meta.url);
-    const configPath = path.resolve(path.dirname(here), '..', '..', 'config', 'default.json');
-    raw = readFileSync(configPath, 'utf8');
-  } catch {
-    // File missing or unreadable — silently use defaults
-    return DEFAULT_CONFIG;
-  }
-
-  return parseRawConfig(raw);
-}
-
-export const config: IaaiConfig = loadConfigFile();
+export const config: IaaiConfig = loadConfigFile(configPath, IaaiConfigSchema, DEFAULT_CONFIG);

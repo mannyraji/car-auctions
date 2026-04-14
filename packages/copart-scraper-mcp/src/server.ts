@@ -4,8 +4,7 @@
 import { createMcpServer } from '@car-auctions/shared';
 import type { CopartClient } from './scraper/copart-client.js';
 import type { CopartSqliteCache } from './cache/sqlite.js';
-import type { ImageCache } from './cache/image-cache.js';
-import type { VinCache } from '@car-auctions/shared';
+import type { ImageCache, VinCache } from '@car-auctions/shared';
 import { createSearchHandler, searchSchema } from './tools/search.js';
 import { createListingHandler, listingSchema } from './tools/listing.js';
 import { createImagesHandler, imagesSchema } from './tools/images.js';

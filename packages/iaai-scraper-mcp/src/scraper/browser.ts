@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import type { Page, BrowserContext } from 'playwright';
 import { CaptchaError, ScraperError } from '@car-auctions/shared';
-import { isCaptchaPage } from '../utils/stealth.js';
+import { isCaptchaPage } from '@car-auctions/shared';
 import type { IaaiSession } from '../types/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -15,11 +15,21 @@ const SESSION_PATH = path.resolve(__dirname, '..', '..', 'data', 'iaai-session.j
 const IAAI_LOGIN_URL = 'https://www.iaai.com/Account/Login';
 const IAAI_ORIGIN = 'https://www.iaai.com';
 
+export interface IaaiBrowserCredentials {
+  email: string;
+  password: string;
+}
+
 export class IaaiBrowser {
   private browser: import('playwright').Browser | null = null;
   private context: BrowserContext | null = null;
   private launchPromise: Promise<void> | null = null;
   private _reauthing = false;
+  private readonly credentials: IaaiBrowserCredentials | null;
+
+  constructor(credentials?: IaaiBrowserCredentials) {
+    this.credentials = credentials ?? null;
+  }
 
   async launch(): Promise<void> {
     if (this.browser) return;
@@ -194,12 +204,13 @@ export class IaaiBrowser {
           parsed.hostname === 'www.iaai.com' && parsed.pathname === '/Account/Login';
         if (!isLoginRedirect || this._reauthing) return;
 
-        const email = process.env['IAAI_EMAIL'];
-        const password = process.env['IAAI_PASSWORD'];
-        if (email && password) {
+        if (this.credentials) {
           this._reauthing = true;
-          this.authenticate(email, password)
-            .catch(() => {})
+          this.authenticate(this.credentials.email, this.credentials.password)
+            .catch((err: unknown) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn('[iaai] re-auth failed:', msg);
+            })
             .finally(() => {
               this._reauthing = false;
             });

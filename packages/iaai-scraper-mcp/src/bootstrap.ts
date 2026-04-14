@@ -49,9 +49,10 @@ export function resolveTransport(): McpServerOptions['transport'] {
 // ─── Credential validation ────────────────────────────────────────────────────
 
 /**
- * Throw if IAAI_EMAIL or IAAI_PASSWORD are absent or empty.
+ * Validate that IAAI_EMAIL and IAAI_PASSWORD are present, and return them.
+ * Throws if either is absent or empty.
  */
-export function assertRequiredCredentials(): void {
+export function assertRequiredCredentials(): { email: string; password: string } {
   const missing: string[] = [];
   if (!process.env['IAAI_EMAIL']) missing.push('IAAI_EMAIL');
   if (!process.env['IAAI_PASSWORD']) missing.push('IAAI_PASSWORD');
@@ -60,6 +61,10 @@ export function assertRequiredCredentials(): void {
       `Config error: missing required environment variable(s): ${missing.join(', ')}`
     );
   }
+  return {
+    email: process.env['IAAI_EMAIL']!,
+    password: process.env['IAAI_PASSWORD']!,
+  };
 }
 
 // ─── Resource cleanup ─────────────────────────────────────────────────────────

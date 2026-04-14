@@ -6,10 +6,14 @@
  * validation errors are logged (field path + message only — no stack
  * traces or file-system paths) and the built-in defaults are used instead.
  */
-import { readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { z } from 'zod';
+import {
+  loadConfigFile,
+  validateConfig as genericValidateConfig,
+  parseRawConfig as genericParseRawConfig,
+} from '@car-auctions/shared';
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -72,67 +76,19 @@ const DEFAULT_CONFIG: CopartConfig = {
   },
 };
 
+// ─── Bound helpers (exported for testing) ─────────────────────────────────────
+
+export function validateConfig(parsed: unknown): CopartConfig {
+  return genericValidateConfig(parsed, CopartConfigSchema, DEFAULT_CONFIG);
+}
+
+export function parseRawConfig(raw: string): CopartConfig {
+  return genericParseRawConfig(raw, CopartConfigSchema, DEFAULT_CONFIG);
+}
+
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
-/**
- * Validate a parsed (unknown) value against the CopartConfig schema.
- *
- * Returns `DEFAULT_CONFIG` (with a warning) when validation fails.
- * Exported for testing.
- */
-export function validateConfig(parsed: unknown): CopartConfig {
-  // Empty object means "no overrides" — use defaults without a warning
-  if (
-    parsed !== null &&
-    typeof parsed === 'object' &&
-    !Array.isArray(parsed) &&
-    Object.keys(parsed).length === 0
-  ) {
-    return DEFAULT_CONFIG;
-  }
+const here = fileURLToPath(import.meta.url);
+const configPath = path.resolve(path.dirname(here), '..', '..', 'config', 'default.json');
 
-  const result = CopartConfigSchema.safeParse(parsed);
-  if (!result.success) {
-    // Option B: surface field path + message; omit stack traces and file-system paths
-    const issues = result.error.issues
-      .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
-      .join('; ');
-    console.warn(`[config] default.json validation failed (using defaults) — ${issues}`);
-    return DEFAULT_CONFIG;
-  }
-
-  return result.data;
-}
-
-/**
- * Parse a raw JSON string and validate it as CopartConfig.
- *
- * Returns `DEFAULT_CONFIG` (with a warning) when the string is not valid JSON.
- * Exported for testing.
- */
-export function parseRawConfig(raw: string): CopartConfig {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    console.warn('[config] default.json is not valid JSON — using defaults');
-    return DEFAULT_CONFIG;
-  }
-  return validateConfig(parsed);
-}
-
-export function loadConfigFile(): CopartConfig {
-  let raw: string;
-  try {
-    const here = fileURLToPath(import.meta.url);
-    const configPath = path.resolve(path.dirname(here), '..', '..', 'config', 'default.json');
-    raw = readFileSync(configPath, 'utf8');
-  } catch {
-    // File missing or unreadable — silently use defaults
-    return DEFAULT_CONFIG;
-  }
-
-  return parseRawConfig(raw);
-}
-
-export const config: CopartConfig = loadConfigFile();
+export const config: CopartConfig = loadConfigFile(configPath, CopartConfigSchema, DEFAULT_CONFIG);
