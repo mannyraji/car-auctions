@@ -156,6 +156,8 @@ Project-specific security rules:
 - TypeScript 5+ on Node.js 20+ (ES2022 target, Node16 module resolution, strict mode) + `@car-auctions/shared`, `@modelcontextprotocol/sdk ^1.18.0`, `playwright ^1.55.0`, `playwright-extra ^4.3.6`, `puppeteer-extra-plugin-stealth ^2.11.2`, `better-sqlite3 ^12.2.0`, `sharp ^0.33.0`, `zod ^3.23.8` (002-iaai-scraper-mcp)
 - SQLite WAL (`data/iaai.sqlite`) for listings, sold history, watchlist; in-memory LRU (max 200 entries, 15 min) for search results; disk (`data/images/`) for compressed images at 24 hr TTL; VIN cache delegated to `@car-auctions/shared` `SqliteVinCache` (002-iaai-scraper-mcp)
 - SQLite via `better-sqlite3` (WAL mode) at `data/iaai.sqlite` for listings, sold history, watchlist; in-memory LRU (max 200 entries, 15 min) for search results; disk (`data/images/`) for compressed WebP images at 24 hr TTL; VIN cache delegated to `@car-auctions/shared` `SqliteVinCache` (002-iaai-scraper-mcp)
+- TypeScript 5+ on Node.js 20+ (ES2022 target, Node16 module resolution, strict mode) + `@car-auctions/shared`, `@modelcontextprotocol/sdk`, `playwright`, `playwright-extra`, `puppeteer-extra-plugin-stealth`, `better-sqlite3`, `zod` (003-carfax-scraper-mcp-tools)
+- SQLite WAL (`data/carfax.sqlite`) for Carfax reports (30-day TTL), optional disk session state in `data/` (003-carfax-scraper-mcp-tools)
 
 ## Recent Changes
 - 001-shared-utilities-lib: Added TypeScript 5+ on Node.js 20+ (ES2022 target, Node16 module resolution, strict mode) + `@modelcontextprotocol/sdk`, `playwright`, `playwright-extra`, `puppeteer-extra-plugin-stealth`, `better-sqlite3`, `@opentelemetry/sdk-node`, `@opentelemetry/exporter-trace-otlp-http`, `ws`
