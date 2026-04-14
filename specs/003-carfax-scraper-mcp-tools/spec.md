@@ -81,7 +81,7 @@ As a maintainer, I need Carfax tool behavior to follow anti-bot, validation, cac
 - **FR-009**: Tool handlers MUST return structured typed errors only (`ScraperError`, `CaptchaError`, `RateLimitError`, `CacheError`).
 - **FR-010**: Each tool invocation MUST emit OTEL span attributes `tool.name`, `tool.status`, and `tool.duration_ms`.
 - **FR-011**: Parser and tool tests MUST use fixture-driven Vitest suites with coverage targets aligned to constitution quality gates.
-- **FR-012**: Persisted Carfax session/auth artifacts MUST be encrypted at rest using a managed encryption key.
+- **FR-012**: Persisted Carfax session/auth artifacts MUST be encrypted at rest using a managed encryption key sourced from environment-managed secrets (`CARFAX_SESSION_KEY` as the active key). Rotation MUST be supported by accepting an optional previous key (`CARFAX_SESSION_KEY_PREVIOUS`) for decrypt-only reads during cutover while writing new artifacts with the active key.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -98,7 +98,7 @@ As a maintainer, I need Carfax tool behavior to follow anti-bot, validation, cac
 - **SC-002**: Invalid VIN requests are rejected at boundary validation with no downstream network call.
 - **SC-003**: Cache hits return in under 100ms for warm entries in local testing.
 - **SC-004**: On simulated upstream failure with cached data present, tools return stale payloads with `stale: true` and non-null `cachedAt`.
-- **SC-005**: Persisted Carfax session/auth artifacts are encrypted at rest with managed-key protection in implementation and tests.
+- **SC-005**: Persisted Carfax session/auth artifacts are encrypted at rest with managed-key protection: tests verify on-disk artifacts are ciphertext (not plaintext JSON/session tokens) and can be decrypted with the active key, with backward-compatible decrypt reads from an optional previous key during rotation.
 
 ## Assumptions
 

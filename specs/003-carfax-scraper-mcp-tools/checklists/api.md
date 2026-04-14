@@ -25,7 +25,7 @@
 
 ## Acceptance Criteria Quality
 
-- [ ] CHK009 Are success criteria objectively measurable with explicit validation method and pass/fail thresholds for each criterion? [Acceptance Criteria, Measurability, Spec §SC-001, Spec §SC-002, Spec §SC-003, Spec §SC-004]
+- [ ] CHK009 Are success criteria objectively measurable with explicit validation method and pass/fail thresholds for each criterion? [Acceptance Criteria, Measurability, Spec §SC-001, Spec §SC-002, Spec §SC-003, Spec §SC-004, Spec §SC-005]
 - [ ] CHK010 Is the “no downstream network call” criterion tied to a defined observable signal (e.g., span/metric/log field) in requirements? [Acceptance Criteria, Gap, Spec §SC-002, Spec §FR-010]
 
 ## Scenario Coverage

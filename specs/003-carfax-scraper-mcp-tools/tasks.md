@@ -21,7 +21,7 @@
 
 - [ ] T001 Create package scaffold and baseline config files in `packages/carfax-scraper-mcp/package.json`, `packages/carfax-scraper-mcp/tsconfig.json`, `packages/carfax-scraper-mcp/vitest.config.ts`, and `packages/carfax-scraper-mcp/config/default.json`
 - [ ] T002 [P] Create canonical package directories and placeholders: `packages/carfax-scraper-mcp/src/`, `packages/carfax-scraper-mcp/src/tools/`, `packages/carfax-scraper-mcp/src/scraper/`, `packages/carfax-scraper-mcp/src/cache/`, `packages/carfax-scraper-mcp/src/utils/`, `packages/carfax-scraper-mcp/src/types/`, `packages/carfax-scraper-mcp/tests/fixtures/`, `packages/carfax-scraper-mcp/data/`
-- [ ] T003 [P] Add package runtime data ignore rules for `packages/carfax-scraper-mcp/data/` in `/home/runner/work/car-auctions/car-auctions/.gitignore`
+- [ ] T003 [P] Add package runtime data ignore rules for `packages/carfax-scraper-mcp/data/` in `/.gitignore`
 - [ ] T004 Create package entry files for MCP startup in `packages/carfax-scraper-mcp/src/index.ts` and `packages/carfax-scraper-mcp/src/server.ts`
 
 ---
@@ -33,7 +33,7 @@
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
 - [ ] T005 Implement Carfax domain/tool boundary types in `packages/carfax-scraper-mcp/src/types/index.ts` for `CarfaxReport`, `CarfaxSummary`, support entities, and tool input/output shapes from `contracts/public-api.md` including `AnalysisError` compatibility
-- [ ] T006 Implement VIN validation and typed tool response helpers in `packages/carfax-scraper-mcp/src/utils/validation.ts` and `packages/carfax-scraper-mcp/src/utils/tool-response.ts` with explicit `StaleableResponse<T>` envelope semantics (`data`, `stale`, `cachedAt`)
+- [ ] T006 Implement VIN validation and typed tool response helpers in `packages/carfax-scraper-mcp/src/utils/validation.ts` and `packages/carfax-scraper-mcp/src/utils/tool-response.ts` aligned to the full `ToolResponse<T>` contract from `contracts/public-api.md` (success/error envelope plus `cached`, `stale`, `cachedAt`, and `timestamp` metadata)
 - [ ] T007 [P] Implement SQLite WAL cache repository with 30-day TTL, stale-read support, and prepared-statement-only queries in `packages/carfax-scraper-mcp/src/cache/sqlite.ts`
 - [ ] T008 [P] Implement in-memory hot cache and package config helpers in `packages/carfax-scraper-mcp/src/cache/memory.ts` and `packages/carfax-scraper-mcp/src/utils/config.ts`
 - [ ] T009 [P] Implement shared rate-limit/backoff utility, daily-cap guard, and proxy-rotation integration points for `process.env.PROXY_URL` failures in `packages/carfax-scraper-mcp/src/utils/rate-limiter.ts`
