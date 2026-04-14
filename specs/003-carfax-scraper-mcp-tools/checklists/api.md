@@ -54,4 +54,4 @@
 ## Ambiguities & Conflicts
 
 - [ ] CHK022 Are any terms such as “when available” and “where applicable” resolved into explicit, testable requirement language? [Ambiguity, Spec §FR-003, Spec §FR-008]
-- [ ] CHK023 Is an explicit requirement ID traceability link defined from each success criterion to one or more functional requirements? [Traceability, Gap, Spec §FR-001-011, Spec §SC-001-004]
+- [ ] CHK023 Is an explicit requirement ID traceability link defined from each success criterion to one or more functional requirements? [Traceability, Gap, Spec §FR-001-012, Spec §SC-001-005]
