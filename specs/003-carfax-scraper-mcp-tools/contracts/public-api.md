@@ -8,16 +8,18 @@
 
 ## Standard Envelope
 
-All tool responses return MCP text content containing JSON for:
+All tool responses return MCP text content containing JSON matching `ToolResponse<T>` from `@car-auctions/shared`:
 
 ```typescript
 // success
 {
   success: true;
   data: T;
-  cached?: boolean;
-  stale?: boolean;
+  error: null;
+  cached: boolean;        // always present; true when served from cache
+  stale: boolean;         // always present; true when cache entry is expired
   cachedAt: string | null;
+  timestamp: string;      // ISO 8601 response timestamp
 }
 
 // error
@@ -25,10 +27,16 @@ All tool responses return MCP text content containing JSON for:
   success: false;
   data: null;
   error: {
-    type: "ScraperError" | "CaptchaError" | "RateLimitError" | "CacheError";
+    code: "SCRAPER_ERROR" | "TIMEOUT" | "CAPTCHA_DETECTED" | "RATE_LIMITED"
+        | "CACHE_ERROR" | "VALIDATION_ERROR" | "UNKNOWN_ERROR";
     message: string;
-    retryAfterMs?: number;
+    retryable: boolean;
+    retryAfterMs: number | null;  // null when no retry window is known
   };
+  cached: boolean;
+  stale: boolean;
+  cachedAt: string | null;
+  timestamp: string;
 }
 ```
 
@@ -65,10 +73,10 @@ All tool responses return MCP text content containing JSON for:
 
 ### Behavior
 
-- Validates VIN at tool boundary.
+- Validates VIN at tool boundary; invalid VIN returns `code: "VALIDATION_ERROR"` immediately with no cache or scraper call.
 - Checks SQLite cache (30-day TTL) before scraping.
 - On scraper failure, returns stale cache (if present) with `stale: true` and `cachedAt`.
-- CAPTCHA returns `CaptchaError`; 403/429 or cap exhaustion returns `RateLimitError`.
+- CAPTCHA returns `code: "CAPTCHA_DETECTED"`; HTTP 403/429 or daily cap exhaustion returns `code: "RATE_LIMITED"` with `retryAfterMs` when available.
 
 ---
 
@@ -98,7 +106,7 @@ All tool responses return MCP text content containing JSON for:
 
 ### Behavior
 
-- Validates VIN at tool boundary.
+- Validates VIN at tool boundary; invalid VIN returns `code: "VALIDATION_ERROR"` immediately with no cache or scraper call.
 - Uses normalized report as source for summary derivation.
 - Reuses report cache path and stale fallback behavior.
 - Returns typed structured errors only.
